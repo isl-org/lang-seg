@@ -3,3 +3,7 @@ Thanks to the code base from:
 2. Pytorch_lightning: https://github.com/PyTorchLightning/pytorch-lightning 
 3. Clip: https://github.com/openai/CLIP 
 4. Pytorch Encoding: https://github.com/zhanghang1989/PyTorch-Encoding 
+
+
+
+Model for demo: https://drive.google.com/file/d/1ayk6NXURI_vIPlym16f_RG3ffxBWHxvb/view?usp=sharing
