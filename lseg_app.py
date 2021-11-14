@@ -329,6 +329,7 @@ def load_model():
     [
         transforms.ToTensor(),
         transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+        transforms.Resize([360,480]),
     ]
 )
 
@@ -357,6 +358,10 @@ if uploaded_file is not None:
             torch.max(output, 1)[1].cpu().numpy()
             for output in outputs
         ]
+        
+    image = pimage[0].permute(1,2,0)
+    image = image * 0.5 + 0.5
+    image = Image.fromarray(np.uint8(255*image)).convert("RGBA")
     
     pred = predicts[0]
     new_palette = get_new_pallete(len(labels))
