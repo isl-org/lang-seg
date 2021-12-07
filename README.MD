@@ -1,4 +1,18 @@
-## Language-driven Semantic Segmentation 
+# Language-driven Semantic Segmentation (LSeg)
+The repo contains PyTorch Implementation of paper [Language-driven Semantic Segmentation](). 
+
+#### Authors: 
+* [Boyi Li](https://sites.google.com/site/boyilics/home)
+* [Kilian Q. Weinberger](http://kilian.cs.cornell.edu/index.html)
+* [Serge Belongie](https://scholar.google.com/citations?user=ORr4XJYAAAAJ&hl=zh-CN)
+* [Vladlen Koltun](http://vladlen.info/)
+* [Rene Ranftl](https://scholar.google.at/citations?user=cwKg158AAAAJ&hl=de)
+
+
+### Overview
+
+
+We present LSeg, a novel model for language-driven semantic image segmentation. LSeg uses a text encoder to compute embeddings of descriptive input labels (e.g., ''grass'' or 'building'') together with a transformer-based image encoder that computes dense per-pixel embeddings of the input image. The image encoder is trained with a contrastive objective to align pixel embeddings to the text embedding of the corresponding semantic class. The text embeddings provide a flexible label representation in which semantically similar labels map to similar regions in the embedding space (e.g., ''cat'' and ''furry''). This allows LSeg to generalize to previously unseen categories at test time, without retraining or even requiring a single additional training sample. We demonstrate that our approach achieves highly competitive zero-shot performance compared to existing zero- and few-shot semantic segmentation methods, and even matches the accuracy of traditional segmentation algorithms when a fixed label set is provided. 
 
 ## Usage
 ### Installation
@@ -35,6 +49,10 @@ pip install wandb
 ### Testing
 ``` bash test.sh ```
 
+
+### Try demo model
+Download the model for demo and put it under folder `checkpoints` as `checkpoints/demo_e200.ckpt`. Then follow [lseg_demo.ipynb](https://github.com/isl-org/lang-seg/blob/main/lseg_demo.ipynb) to play around with LSeg. Enjoy!
+
 ### Model Zoo
 <table>
   <thead>
@@ -55,12 +73,13 @@ pip install wandb
 
 If you find this repo useful, please cite:
 ```
-
+@article{li2021lan,
+  title={Language-driven Semantic Segmentation},
+  author={Li, Boyi and Weinberger, Kilian Q and Belongie, Serge and Koltun, Vladlen and Ranftl, Rene},
+  journal={arXiv preprint},
+  year={2021}
+}
 ```
 
 ## Acknowledgement
-Thanks to the code base from:
-1. DPT: https://github.com/isl-org/DPT 
-2. Pytorch_lightning: https://github.com/PyTorchLightning/pytorch-lightning 
-3. Clip: https://github.com/openai/CLIP 
-4. Pytorch Encoding: https://github.com/zhanghang1989/PyTorch-Encoding 
+Thanks to the code base from [DPT](https://github.com/isl-org/DPT), [Pytorch_lightning](https://github.com/PyTorchLightning/pytorch-lightning ), [Clip](https://github.com/openai/CLIP), [Pytorch Encoding](https://github.com/zhanghang1989/PyTorch-Encoding), [Streamlit](https://streamlit.io/), [Wandb](https://wandb.ai/site)
