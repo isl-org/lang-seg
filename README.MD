@@ -41,31 +41,43 @@ pip install wandb
 ```
 
 ### Running interactive app
-``` streamlit run lseg_app.py ```
+Download the model for demo and put it under folder `checkpoints` as `checkpoints/demo_e200.ckpt`. 
+
+Then ``` streamlit run lseg_app.py ```
 
 ### Training
+Backbone = ViT-L/16, Text Encoder from CLIP ViT-B/32
+
 ``` bash train.sh ```
 
 ### Testing
+Backbone = ViT-L/16, Text Encoder from CLIP ViT-B/32
+
 ``` bash test.sh ```
 
 
 ### Try demo model
-Download the model for demo and put it under folder `checkpoints` as `checkpoints/demo_e200.ckpt`. Then follow [lseg_demo.ipynb](https://github.com/isl-org/lang-seg/blob/main/lseg_demo.ipynb) to play around with LSeg. Enjoy!
+Download the model for demo and put it under folder `checkpoints` as `checkpoints/demo_e200.ckpt`. 
+
+Then follow [lseg_demo.ipynb](https://github.com/isl-org/lang-seg/blob/main/lseg_demo.ipynb) to play around with LSeg. Enjoy!
 
 ### Model Zoo
 <table>
   <thead>
     <tr style="text-align: right;">
-      <th></th>
+       <th></th>
       <th>name</th>
+      <th>backbone</th>
+      <th>text encoder</th>
       <th>url</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <th>0</th>
-      <td>Model for demo</td>
+       <th>0</th>
+       <td>Model for demo</td>
+      <th>ViT-L/16</th>
+      <th>CLIP ViT-B/32</th>
       <td><a href="https://drive.google.com/file/d/1ayk6NXURI_vIPlym16f_RG3ffxBWHxvb/view?usp=sharing">download</a></td>
     </tr>
   </tbody>
@@ -82,4 +94,4 @@ If you find this repo useful, please cite:
 ```
 
 ## Acknowledgement
-Thanks to the code base from [DPT](https://github.com/isl-org/DPT), [Pytorch_lightning](https://github.com/PyTorchLightning/pytorch-lightning ), [Clip](https://github.com/openai/CLIP), [Pytorch Encoding](https://github.com/zhanghang1989/PyTorch-Encoding), [Streamlit](https://streamlit.io/), [Wandb](https://wandb.ai/site)
+Thanks to the code base from [DPT](https://github.com/isl-org/DPT), [Pytorch_lightning](https://github.com/PyTorchLightning/pytorch-lightning ), [CLIP](https://github.com/openai/CLIP), [Pytorch Encoding](https://github.com/zhanghang1989/PyTorch-Encoding), [Streamlit](https://streamlit.io/), [Wandb](https://wandb.ai/site)
