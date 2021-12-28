@@ -87,7 +87,7 @@ Then follow [lseg_demo.ipynb](https://github.com/isl-org/lang-seg/blob/main/lseg
 
 If you find this repo useful, please cite:
 ```
-@article{li2021lan,
+@article{li2022lan,
   title={Language-driven Semantic Segmentation},
   author={Li, Boyi and Weinberger, Kilian Q and Belongie, Serge and Koltun, Vladlen and Ranftl, Rene},
   journal={arXiv preprint},
