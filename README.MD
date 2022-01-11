@@ -42,10 +42,19 @@ pip install test-tube
 pip install wandb
 ```
 
-### 🌻 👉 Running interactive app
+
+
+### 🌻 Try demo now
+
+#### 👉 Option 1: Running interactive app
 Download the model for demo and put it under folder `checkpoints` as `checkpoints/demo_e200.ckpt`. 
 
 Then ``` streamlit run lseg_app.py ```
+
+#### 👉 Option 2: Jupyter Notebook
+Download the model for demo and put it under folder `checkpoints` as `checkpoints/demo_e200.ckpt`. 
+
+Then follow [lseg_demo.ipynb](https://github.com/isl-org/lang-seg/blob/main/lseg_demo.ipynb) to play around with LSeg. Enjoy!
 
 ### Training
 Backbone = ViT-L/16, Text Encoder from CLIP ViT-B/32
@@ -56,12 +65,6 @@ Backbone = ViT-L/16, Text Encoder from CLIP ViT-B/32
 Backbone = ViT-L/16, Text Encoder from CLIP ViT-B/32
 
 ``` bash test.sh ```
-
-
-### Try demo model
-Download the model for demo and put it under folder `checkpoints` as `checkpoints/demo_e200.ckpt`. 
-
-Then follow [lseg_demo.ipynb](https://github.com/isl-org/lang-seg/blob/main/lseg_demo.ipynb) to play around with LSeg. Enjoy!
 
 ### Model Zoo
 <table>
