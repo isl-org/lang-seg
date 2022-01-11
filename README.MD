@@ -1,5 +1,5 @@
 # Language-driven Semantic Segmentation (LSeg)
-The repo contains official PyTorch Implementation of paper [Language-driven Semantic Segmentation](). 
+The repo contains official PyTorch Implementation of paper [Language-driven Semantic Segmentation](https://arxiv.org/abs/2201.03546). 
 
 #### Authors: 
 * [Boyi Li](https://sites.google.com/site/boyilics/home)
