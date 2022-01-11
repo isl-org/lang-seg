@@ -42,7 +42,7 @@ pip install test-tube
 pip install wandb
 ```
 
-### Running interactive app
+### 🌻 👉 Running interactive app
 Download the model for demo and put it under folder `checkpoints` as `checkpoints/demo_e200.ckpt`. 
 
 Then ``` streamlit run lseg_app.py ```
