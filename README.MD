@@ -42,6 +42,15 @@ pip install test-tube
 pip install wandb
 ```
 
+### Data Preparation
+By default, for training, testing and demo, we use [ADE20k](https://groups.csail.mit.edu/vision/datasets/ADE20K/).
+
+```
+python prepare_ade20k.py
+unzip ../datasets/ADEChallengeData2016.zip
+```
+
+Note: for demo, if you want to use random inputs, you can ignore data loading and comment the code at [link](https://github.com/isl-org/lang-seg/blob/main/modules/lseg_module.py#L55). 
 
 
 ### 🌻 Try demo now
