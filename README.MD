@@ -101,11 +101,13 @@ Backbone = ViT-L/16, Text Encoder from CLIP ViT-B/32
 
 If you find this repo useful, please cite:
 ```
-@article{li2022language,
-  title={Language-driven Semantic Segmentation},
-  author={Li, Boyi and Weinberger, Kilian Q and Belongie, Serge and Koltun, Vladlen and Ranftl, Ren{\'e}},
-  journal={arXiv preprint arXiv:2201.03546},
-  year={2022}
+@inproceedings{
+li2022languagedriven,
+title={Language-driven Semantic Segmentation},
+author={Boyi Li and Kilian Q Weinberger and Serge Belongie and Vladlen Koltun and Rene Ranftl},
+booktitle={International Conference on Learning Representations},
+year={2022},
+url={https://openreview.net/forum?id=RriDjddCLN}
 }
 ```
 
