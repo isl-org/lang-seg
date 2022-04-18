@@ -57,27 +57,7 @@ Note: for demo, if you want to use random inputs, you can ignore data loading an
 
 ### 🌻 Try demo now
 
-#### 👉 Option 1: Running interactive app
-Download the model for demo and put it under folder `checkpoints` as `checkpoints/demo_e200.ckpt`. 
-
-Then ``` streamlit run lseg_app.py ```
-
-#### 👉 Option 2: Jupyter Notebook
-Download the model for demo and put it under folder `checkpoints` as `checkpoints/demo_e200.ckpt`. 
-
-Then follow [lseg_demo.ipynb](https://github.com/isl-org/lang-seg/blob/main/lseg_demo.ipynb) to play around with LSeg. Enjoy!
-
-### Training
-Backbone = ViT-L/16, Text Encoder from CLIP ViT-B/32
-
-``` bash train.sh ```
-
-### Testing
-Backbone = ViT-L/16, Text Encoder from CLIP ViT-B/32
-
-``` bash test.sh ```
-
-### Model Zoo
+#### Download Demo Model
 <table>
   <thead>
     <tr style="text-align: right;">
@@ -98,6 +78,49 @@ Backbone = ViT-L/16, Text Encoder from CLIP ViT-B/32
     </tr>
   </tbody>
 </table>
+
+#### 👉 Option 1: Running interactive app
+Download the model for demo and put it under folder `checkpoints` as `checkpoints/demo_e200.ckpt`. 
+
+Then ``` streamlit run lseg_app.py ```
+
+#### 👉 Option 2: Jupyter Notebook
+Download the model for demo and put it under folder `checkpoints` as `checkpoints/demo_e200.ckpt`. 
+
+Then follow [lseg_demo.ipynb](https://github.com/isl-org/lang-seg/blob/main/lseg_demo.ipynb) to play around with LSeg. Enjoy!
+
+
+
+### Training and Testing Example
+Training: Backbone = ViT-L/16, Text Encoder from CLIP ViT-B/32
+
+``` bash train.sh ```
+
+Testing: Backbone = ViT-L/16, Text Encoder from CLIP ViT-B/32
+
+``` bash test.sh ```
+
+<!-- ### Model Zoo
+<table>
+  <thead>
+    <tr style="text-align: right;">
+       <th></th>
+      <th>name</th>
+      <th>backbone</th>
+      <th>text encoder</th>
+      <th>url</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+       <th>0</th>
+       <td>Model for demo</td>
+      <th>ViT-L/16</th>
+      <th>CLIP ViT-B/32</th>
+      <td><a href="https://drive.google.com/file/d/1ayk6NXURI_vIPlym16f_RG3ffxBWHxvb/view?usp=sharing">download</a></td>
+    </tr>
+  </tbody>
+</table> -->
 
 If you find this repo useful, please cite:
 ```
