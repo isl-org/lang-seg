@@ -61,7 +61,6 @@ Note: for demo, if you want to use random inputs, you can ignore data loading an
 <table>
   <thead>
     <tr style="text-align: right;">
-       <th></th>
       <th>name</th>
       <th>backbone</th>
       <th>text encoder</th>
@@ -70,7 +69,6 @@ Note: for demo, if you want to use random inputs, you can ignore data loading an
   </thead>
   <tbody>
     <tr>
-       <th>0</th>
        <td>Model for demo</td>
       <th>ViT-L/16</th>
       <th>CLIP ViT-B/32</th>
