@@ -198,7 +198,7 @@ python -u test_lseg_zs.py --backbone clip_vitl16_384 --module clipseg_DPT_test_v
       <th>ResNet101</th>
       <th>CLIP ViT-B/32</th>
       <th>24.9</th>
-      <td><a href="https://drive.google.com/file/d/1ayk6NXURI_vIPlym16f_RG3ffxBWHxvb/view?usp=sharing">download</a></td>
+      <td><a href="https://drive.google.com/file/d/1q7iqEUmPePqqUq0QDUlhHkajTAydvVYn/view?usp=sharing">download</a></td>
     </tr>
     <tr>
        <th>coco</th>
