@@ -120,13 +120,13 @@ done
 ```
 #### FSS
 ``` 
-python -u test_lseg_zs.py --backbone clip_resnet101 --module clipseg_DPT_test_v2 --dataset fss \
+python -u test_lseg_zs.py --backbone clip_vitl16_384 --module clipseg_DPT_test_v2 --dataset fss \
 --widehead --no-scaleinv --arch_option 0 --ignore_index 255 --fold 0 --nshot 0 \
 --weights checkpoints/fss_l16.ckpt 
 ```
 
 ``` 
-python -u test_lseg_zs.py --backbone clip_vitl16_384 --module clipseg_DPT_test_v2 --dataset fss \
+python -u test_lseg_zs.py --backbone clip_resnet101 --module clipseg_DPT_test_v2 --dataset fss \
 --widehead --no-scaleinv --arch_option 0 --ignore_index 255 --fold 0 --nshot 0 \
 --weights checkpoints/fss_rn101.ckpt 
 ```
