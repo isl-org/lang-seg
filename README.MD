@@ -26,22 +26,13 @@ Option 1:
 
 Option 2: 
 ```
-conda install ipython
-pip install torch==1.7.1 torchvision==0.8.2 torchaudio==0.7.2
+pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 torchaudio==0.7.2 -f https://download.pytorch.org/whl/torch_stable.html
 pip install git+https://github.com/zhanghang1989/PyTorch-Encoding/
-pip install pytorch-lightning==1.3.5
-pip install opencv-python
-pip install imageio
-pip install ftfy regex tqdm
+pip install pytorch-lightning==1.4.9 opencv-python imageio ftfy regex tqdm timm
 pip install git+https://github.com/openai/CLIP.git
-pip install altair
-pip install streamlit
-pip install --upgrade protobuf
-pip install timm
-pip install tensorboardX
-pip install matplotlib
-pip install test-tube
-pip install wandb
+
+pip install altair streamlit matplotlib tensorboardX test-tube wandb
+pip install ipython
 ```
 
 ### Data Preparation
