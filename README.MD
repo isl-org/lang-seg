@@ -190,7 +190,7 @@ python -u test_lseg_zs.py --backbone clip_resnet101 --module clipseg_DPT_test_v2
       <th>ResNet101</th>
       <th>CLIP ViT-B/32</th>
       <th>25.1</th>
-      <td><a href="https://drive.google.com/file/d/1q7iqEUmPePqqUq0QDUlhHkajTAydvVYn/view?usp=sharing">download</a></td>
+      <td><a href="https://drive.google.com/file/d/1fRODZ0YlrQb18-tvqs7ImL69RwkH-tLj/view?usp=sharing">download</a></td>
     </tr>
     <tr>
        <th>coco</th>
