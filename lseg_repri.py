@@ -201,7 +201,7 @@ class Options:
         parser.add_argument(
             '--bsz', 
             type=int, 
-            default=1
+            default=2
             )
         parser.add_argument(
             '--benchmark', 
@@ -280,6 +280,7 @@ def episodic_validate(args):
 
             # NOTE: args.batch_size_val is equivalent to say number of tasks
             features_s = torch.zeros(args.batch_size_val, args.shot, c, h, w).to(device)
+            text_s = torch.zeros(args.batch_size_val, 1, c).to(device) # dim[1] is the label text
             features_q = torch.zeros(args.batch_size_val, 1, c, h, w).to(device)
             gt_s = 255 * torch.ones(args.batch_size_val, args.shot, args.image_size,
                                     args.image_size).long().to(device)
@@ -317,14 +318,17 @@ def episodic_validate(args):
                     # TODO: COMPLETED
                     # f_s = model.module.extract_features(spprt_imgs.squeeze(0)) #[shots, c, h, w]
                     # f_q = model.module.extract_features(qry_img) #[1, c, h, w]
-                    f_s = model.extract_features(spprt_imgs.squeeze(0), subcls)
-                    f_q = model.extract_features(qry_img)
+
+                    # TODO: merge the text and support image features
+                    f_s, t_s, _ = model.extract_features(spprt_imgs.squeeze(0), subcls)
+                    f_q, _, _ = model.extract_features(qry_img)
 
                     shot = f_s.size(0)
                     n_shots[i] = shot
                     features_s[i, :shot] = f_s.detach() # add the feature tensor of the shots to the container for each pair in the batch
                     features_q[i] = f_q.detach() # same for the query but only one shot here
-                    
+                    text_s[i] = t_s.detach()
+
                     # store the corresponding labels
                     gt_s[i, :shot] = s_label
                     gt_q[i, 0] = q_label
@@ -343,7 +347,7 @@ def episodic_validate(args):
 
             # ===========  Initialize the classifier + prototypes + F/B parameter Π ===============
             classifier = Classifier(args)
-            classifier.init_prototypes(features_s, features_q, gt_s, gt_q, classes, callback)
+            classifier.init_prototypes(features_s, features_q, text_s, gt_s, gt_q, classes, callback)
             batch_deltas = classifier.compute_FB_param(features_q=features_q, gt_q=gt_q)
             deltas_init[run, e, :] = batch_deltas.cpu()
 
@@ -479,18 +483,19 @@ def test(args):
         target = batch['query_mask']
         class_info = batch['class_id']
 
-        # get support images from the batch
-
         # pred_mask = evaluator.parallel_forward(image, class_info)
         pred_mask = model(image, class_info)
         
+        # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
         assert pred_mask.argmax(dim=1).size() == batch['query_mask'].size()
         
         # 2. Evaluate prediction
         if args.benchmark == 'pascal' and batch['query_ignore_idx'] is not None:
             query_ignore_idx = batch['query_ignore_idx']
+            # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
             area_inter, area_union = Evaluator.classify_prediction(pred_mask.argmax(dim=1), target, query_ignore_idx)
         else:
+            # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
             area_inter, area_union = Evaluator.classify_prediction(pred_mask.argmax(dim=1), target)
 
         average_meter.update(area_inter, area_union, class_info, loss=None)

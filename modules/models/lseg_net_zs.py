@@ -197,7 +197,6 @@ class LSeg(BaseModel):
 
         image_features = self.scratch.head1(path_1)
 
-
         imshape = image_features.shape
         image_features = [image_features[i].unsqueeze(0).permute(0,2,3,1).reshape(-1, self.out_c) for i in range(len(image_features))]
 
@@ -291,9 +290,11 @@ class LSegRN(BaseModel):
 
         self.texts = []
         # original
-        label = ['others', '']
+        # label = ['others', '']
+        label = ['']
         for class_i in range(len(self.label_list)):
-            label[1] = self.label_list[class_i]
+            # label[1] = self.label_list[class_i]
+            label[0] = self.label_list[class_i]
             text = clip.tokenize(label)
             self.texts.append(text)
 
@@ -319,11 +320,13 @@ class LSegRN(BaseModel):
         path_1 = self.scratch.refinenet1(path_2, layer_1_rn)
 
         self.logit_scale = self.logit_scale.to(x.device)
-        text_features = [self.clip_pretrained.encode_text(text.to(x.device)) for text in texts]
 
-        image_features = self.scratch.head1(path_1)
+        # a list of batch-text encodings text_features[i] is the text embeddings for batch i
+        text_features = [self.clip_pretrained.encode_text(text.to(x.device)) for text in texts]
+        image_features = self.scratch.head1(path_1) # [batch or n_task, c, h, w]
 
         imshape = image_features.shape
+        # seperate the batch into a list of per-image features
         image_features = [image_features[i].unsqueeze(0).permute(0,2,3,1).reshape(-1, self.out_c) for i in range(len(image_features))]
 
         # normalized features
@@ -371,9 +374,9 @@ class LSegRN(BaseModel):
         # logits_per_images = [self.logit_scale * image_feature.half() @ text_feature.t() for image_feature, text_feature in zip(image_features, text_features)]
         logits_per_images = [self.logit_scale * image_feature @ text_feature.t() for image_feature, text_feature in zip(image_features, text_features)]
         outs = [logits_per_image.float().view(1, imshape[2], imshape[3], -1).permute(0,3,1,2) for logits_per_image in logits_per_images]
-        out = torch.cat([out for out in outs], dim=0)
+        out = torch.cat([out for out in outs], dim=0) # [n_tasks, fore and back, h, w]
 
-        out = self.scratch.output_conv(out)
+        out = self.scratch.output_conv(out) # upsampling to 480
             
         return out
 
