@@ -14,6 +14,7 @@ from fewshot_data.common.evaluation import Evaluator
 from fewshot_data.common import utils
 from fewshot_data.data.dataset import FSSDataset
 from repri_classifier import Classifier, batch_intersectionAndUnionGPU, to_one_hot
+from types import SimpleNamespace
 
 
 class Options:
@@ -83,7 +84,7 @@ class Options:
         parser.add_argument(
             "--no-cuda",
             action="store_true",
-            default=True,
+            default=False if torch.cuda.is_available() else True, #True,
             help="disables CUDA training",
         )
         parser.add_argument(
@@ -237,9 +238,9 @@ def episodic_validate(args):
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     if device == 'cuda':
-        model = args.module.net.eval().cuda()
+        model = args.module.scratch.eval().cuda()
     else:
-        model = args.module.net.eval().cpu()
+        model = args.module.scratch.eval().cpu()
 
     # total number of test cases / batch size = number of episode, a episode contains a multiple (query, supports) pairs of random classes
     nb_episodes = int(args.test_num / args.batch_size_val)
@@ -337,9 +338,9 @@ def episodic_validate(args):
                     classes.append([class_.item() for class_ in subcls])
             
             # =========== Normalize features along channel dimension ===============
-            if args.norm_feat:
-                features_s = F.normalize(features_s, dim=2)
-                features_q = F.normalize(features_q, dim=2)
+            # if args.norm_feat:
+            #     features_s = F.normalize(features_s, dim=2)
+            #     features_q = F.normalize(features_q, dim=2)
 
             # =========== Create a callback is args.visdom_port != -1 ===============
             # callback = VisdomLogger(port=args.visdom_port) if use_callback else None
@@ -364,8 +365,15 @@ def episodic_validate(args):
                                     mode='bilinear',
                                     align_corners=True) # upsample the logit score to the original image size
             probas = classifier.get_probas(logits).detach() # get the probabilty at each spatial location
-            intersection, union, _ = batch_intersectionAndUnionGPU(probas, gt_q, 2)  # [n_tasks, shot, num_class]
-            intersection, union = intersection.cpu(), union.cpu()
+
+            # intersection, union, _ = batch_intersectionAndUnionGPU(probas, gt_q, 2)  # [n_tasks, shot, num_class]
+            # intersection, union = intersection.cpu(), union.cpu()
+
+            if args.benchmark == 'pascal' and batch['query_ignore_idx'] is not None:
+                query_ignore_idx = batch['query_ignore_idx']
+                intersection, union = Evaluator.classify_prediction(probas, gt_q, query_ignore_idx)
+            else:
+                intersection, union = Evaluator.classify_prediction(probas, gt_q)
 
             # ================== Log metrics ==================
             one_hot_gt = to_one_hot(gt_q, 2)
@@ -389,17 +397,6 @@ def episodic_validate(args):
                                                                             mIoU,
                                                                             loss_meter=loss_meter,
                                                                             ))
-            # ================== Visualization ==================
-            # if args.visu:
-            #     root = os.path.join('plots', 'episodes')
-            #     os.makedirs(root, exist_ok=True)
-            #     save_path = os.path.join(root, f'run_{run}_episode_{e}.pdf')
-            #     make_episode_visualization(img_s=spprt_imgs[0].cpu().numpy(),
-            #                             img_q=qry_img[0].cpu().numpy(),
-            #                             gt_s=s_label[0].cpu().numpy(),
-            #                             gt_q=q_label[0].cpu().numpy(),
-            #                             preds=probas[-1].cpu().numpy(),
-            #                             save_path=save_path)
 
         mIoU = np.mean(list(IoU.values()))
         print('mIoU---Val result: mIoU {:.4f}.'.format(mIoU))
@@ -452,64 +449,84 @@ def test(args):
     module = load_checkpoint(module_def)
 
     Evaluator.initialize()
+    image_size = 480
     if args.backbone in ["clip_resnet101"]:
         # pascal and imagenet use the same norm and mean
-        FSSDataset.initialize(img_size=480, datapath=args.datapath, use_original_imgsize=False, imagenet_norm=True)
+        FSSDataset.initialize(img_size=image_size, datapath=args.datapath, use_original_imgsize=False, imagenet_norm=True)
     else:
-        FSSDataset.initialize(img_size=480, datapath=args.datapath, use_original_imgsize=False)
+        FSSDataset.initialize(img_size=image_size, datapath=args.datapath, use_original_imgsize=False)
 
     # dataloader
     args.benchmark = args.dataset
-    dataloader = FSSDataset.build_dataloader(args.benchmark, args.bsz, args.nworker, args.fold, 'test', args.nshot)
-
+    dataloader, dataset = FSSDataset.build_dataloader(
+        benchmark=args.benchmark, 
+        bsz=args.bsz, 
+        nworker=args.nworker, 
+        fold=args.fold, 
+        split='test', 
+        shot=args.nshot)
+    
     # TODO: replace the following code with episodic_validate
+    params = {
+        'module': module,
+        'image_size':  image_size,
+        'test_num': len(dataset.img_metadata), # total number of test cases
+        'batch_size_val': args.bsz,
+        'n_runs': 1, # repeat the experiment 1 time
+        'shot': args.nshot,
+        'val_loader': dataloader,
+        'benchmark': args.dataset # pascal
+    }
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    if device == 'cuda':
-        model = module.net.eval().cuda()
-    else:
-        model = module.net.eval().cpu()
+    # RePRI inference
+    episodic_validate(SimpleNamespace(**params))
 
-    f = open("logs/fewshot/log_fewshot-test_nshot{}_{}.txt".format(args.nshot, args.dataset), "a+")
+    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # if device == 'cuda':
+    #     model = module.net.eval().cuda()
+    # else:
+    #     model = module.net.eval().cpu()
 
-    utils.fix_randseed(0)
-    average_meter = AverageMeter(dataloader.dataset)
-    for idx, batch in enumerate(dataloader):
-        if torch.cuda.is_available():
-            batch = utils.to_cuda(batch)
-        else:
-            batch = utils.to_cpu(batch)
-        image = batch['query_img']
-        target = batch['query_mask']
-        class_info = batch['class_id']
+    # f = open("logs/fewshot/log_fewshot-test_nshot{}_{}.txt".format(args.nshot, args.dataset), "a+")
 
-        # pred_mask = evaluator.parallel_forward(image, class_info)
-        pred_mask = model(image, class_info)
+    # utils.fix_randseed(0)
+    # average_meter = AverageMeter(dataloader.dataset)
+    # for idx, batch in enumerate(dataloader):
+    #     if torch.cuda.is_available():
+    #         batch = utils.to_cuda(batch)
+    #     else:
+    #         batch = utils.to_cpu(batch)
+    #     image = batch['query_img']
+    #     target = batch['query_mask']
+    #     class_info = batch['class_id']
+
+    #     # pred_mask = evaluator.parallel_forward(image, class_info)
+    #     pred_mask = model(image, class_info)
         
-        # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
-        assert pred_mask.argmax(dim=1).size() == batch['query_mask'].size()
+    #     # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
+    #     assert pred_mask.argmax(dim=1).size() == batch['query_mask'].size()
         
-        # 2. Evaluate prediction
-        if args.benchmark == 'pascal' and batch['query_ignore_idx'] is not None:
-            query_ignore_idx = batch['query_ignore_idx']
-            # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
-            area_inter, area_union = Evaluator.classify_prediction(pred_mask.argmax(dim=1), target, query_ignore_idx)
-        else:
-            # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
-            area_inter, area_union = Evaluator.classify_prediction(pred_mask.argmax(dim=1), target)
+    #     # 2. Evaluate prediction
+    #     if args.benchmark == 'pascal' and batch['query_ignore_idx'] is not None:
+    #         query_ignore_idx = batch['query_ignore_idx']
+    #         # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
+    #         area_inter, area_union = Evaluator.classify_prediction(pred_mask.argmax(dim=1), target, query_ignore_idx)
+    #     else:
+    #         # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
+    #         area_inter, area_union = Evaluator.classify_prediction(pred_mask.argmax(dim=1), target)
 
-        average_meter.update(area_inter, area_union, class_info, loss=None)
-        average_meter.write_process(idx, len(dataloader), epoch=-1, write_batch_idx=1)
+    #     average_meter.update(area_inter, area_union, class_info, loss=None)
+    #     average_meter.write_process(idx, len(dataloader), epoch=-1, write_batch_idx=1)
 
-    # Write evaluation results
-    average_meter.write_result('Test', 0)
-    test_miou, test_fb_iou = average_meter.compute_iou()
+    # # Write evaluation results
+    # average_meter.write_result('Test', 0)
+    # test_miou, test_fb_iou = average_meter.compute_iou()
 
-    Logger.info('Fold %d, %d-shot ==> mIoU: %5.2f \t FB-IoU: %5.2f' % (args.fold, args.nshot, test_miou.item(), test_fb_iou.item()))
-    Logger.info('==================== Finished Testing ====================')
-    f.write('{}\n'.format(args.weights))
-    f.write('Fold %d, %d-shot ==> mIoU: %5.2f \t FB-IoU: %5.2f\n' % (args.fold, args.nshot, test_miou.item(), test_fb_iou.item()))
-    f.close()
+    # Logger.info('Fold %d, %d-shot ==> mIoU: %5.2f \t FB-IoU: %5.2f' % (args.fold, args.nshot, test_miou.item(), test_fb_iou.item()))
+    # Logger.info('==================== Finished Testing ====================')
+    # f.write('{}\n'.format(args.weights))
+    # f.write('Fold %d, %d-shot ==> mIoU: %5.2f \t FB-IoU: %5.2f\n' % (args.fold, args.nshot, test_miou.item(), test_fb_iou.item()))
+    # f.close()
                 
 
 if __name__ == "__main__":
