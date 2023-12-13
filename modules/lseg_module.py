@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 import torch.nn.functional as F
 
 from modules.models.lseg_vit import forward_vit
-from modules.repri_classifier import Classifier, batch_intersectionAndUnionGPU, to_one_hot
+from repri_classifier import Classifier, batch_intersectionAndUnionGPU, to_one_hot
 from .lsegmentation_module import LSegmentationModule
 from .models.lseg_net import BaseModel, LSeg, LSegNet
 from encoding.models.sseg.base import up_kwargs

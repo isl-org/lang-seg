@@ -1,3 +1,4 @@
+from collections import defaultdict
 import os
 import argparse
 import numpy as np
@@ -12,6 +13,7 @@ from fewshot_data.common.vis import Visualizer
 from fewshot_data.common.evaluation import Evaluator
 from fewshot_data.common import utils
 from fewshot_data.data.dataset import FSSDataset
+from repri_classifier import Classifier, batch_intersectionAndUnionGPU, to_one_hot
 
 
 class Options:
@@ -90,6 +92,8 @@ class Options:
         # checking point
         parser.add_argument(
             "--weights", type=str, default='./checkpoints/pascal_fold0.ckpt', help="checkpoint to test"
+            # NOTE: default is teh pascal_fold0 trained weight, which mean it is trained on fold 1,2,3. 
+            # Refer to the LSeg github repo for more details
         )
         # evaluation option
         parser.add_argument(
@@ -226,7 +230,185 @@ class Options:
         args.cuda = not args.no_cuda and torch.cuda.is_available()
         print(args)
         return args
+    
 
+def episodic_validate(args):
+    print('==> Start testing')
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    if device == 'cuda':
+        model = args.module.net.eval().cuda()
+    else:
+        model = args.module.net.eval().cpu()
+
+    # total number of test cases / batch size = number of episode, a episode contains a multiple (query, supports) pairs of random classes
+    nb_episodes = int(args.test_num / args.batch_size_val)
+
+    # ========== Metrics initialization  ==========    
+    H, W = args.image_size, args.image_size
+    # c = model.module.bottleneck_dim
+    # get the feature size TODO: COMPLETED
+    # h = model.module.feature_res[0]
+    # w = model.module.feature_res[1]
+    c = 512
+    h = 240
+    w = 240
+
+    # intialize the container to store the results
+    runtimes = torch.zeros(args.n_runs)
+    deltas_init = torch.zeros((args.n_runs, nb_episodes, args.batch_size_val))
+    deltas_final = torch.zeros((args.n_runs, nb_episodes, args.batch_size_val))
+    val_IoUs = np.zeros(args.n_runs)
+    val_losses = np.zeros(args.n_runs)
+
+    # ========== Perform the runs  ==========
+    # mainly to repeat the same set of experiment n_run times
+    for run in tqdm(range(args.n_runs)):
+
+        # =============== Initialize the metric dictionaries ===============
+        loss_meter = AverageMeter()
+        iter_num = 0
+        cls_intersection = defaultdict(int)  # Default value is 0
+        cls_union = defaultdict(int)
+        IoU = defaultdict(int)
+
+        # =============== episode = group of tasks ===============
+        # for each episode, it contains multiple (query, supports) pairs, each pair requires its own \theta parameters of the classifier 
+        # to make inference on the pair corresponding query image.
+
+        for e in tqdm(range(nb_episodes)):
+
+            # NOTE: args.batch_size_val is equivalent to say number of tasks
+            features_s = torch.zeros(args.batch_size_val, args.shot, c, h, w).to(device)
+            features_q = torch.zeros(args.batch_size_val, 1, c, h, w).to(device)
+            gt_s = 255 * torch.ones(args.batch_size_val, args.shot, args.image_size,
+                                    args.image_size).long().to(device)
+            gt_q = 255 * torch.ones(args.batch_size_val, 1, args.image_size,
+                                    args.image_size).long().to(device)
+            n_shots = torch.zeros(args.batch_size_val).to(device)
+            classes = []  # All classes considered in the tasks
+
+            # =========== Generate tasks and extract features for each task - a pair of query and supports ===============
+            with torch.no_grad():
+                for i in range(args.batch_size_val):
+                    # load each pair in the episode one by one
+                    try:
+                        # qry_img, q_label, spprt_imgs, s_label, subcls, _, _ = iter_loader.next()
+                        batch = iter_loader.next()
+                    except:
+                        iter_loader = iter(args.val_loader)
+                        # qry_img, q_label, spprt_imgs, s_label, subcls, _, _ = iter_loader.next()
+                        batch = iter_loader.next()
+
+                    qry_img = batch['query_img']
+                    q_label = batch['query_mask']
+                    spprt_imgs = batch['support_imgs']
+                    s_label = batch['support_masks']
+                    subcls = batch['class_id']
+                    iter_num += 1
+
+                    # place it to the corresponding gpu/cpu/the ith gpu in the cluster
+                    q_label = q_label.to(device)
+                    spprt_imgs = spprt_imgs.to(device)
+                    s_label = s_label.to(device)
+                    qry_img = qry_img.to(device)
+
+                    # get the final feature tensor of the support images and the query image
+                    # TODO: COMPLETED
+                    # f_s = model.module.extract_features(spprt_imgs.squeeze(0)) #[shots, c, h, w]
+                    # f_q = model.module.extract_features(qry_img) #[1, c, h, w]
+                    f_s = model.extract_features(spprt_imgs.squeeze(0), subcls)
+                    f_q = model.extract_features(qry_img)
+
+                    shot = f_s.size(0)
+                    n_shots[i] = shot
+                    features_s[i, :shot] = f_s.detach() # add the feature tensor of the shots to the container for each pair in the batch
+                    features_q[i] = f_q.detach() # same for the query but only one shot here
+                    
+                    # store the corresponding labels
+                    gt_s[i, :shot] = s_label
+                    gt_q[i, 0] = q_label
+                    
+                    # add individual class label in a batch to the container, recall item() only work for tensor that contains one element only
+                    classes.append([class_.item() for class_ in subcls])
+            
+            # =========== Normalize features along channel dimension ===============
+            if args.norm_feat:
+                features_s = F.normalize(features_s, dim=2)
+                features_q = F.normalize(features_q, dim=2)
+
+            # =========== Create a callback is args.visdom_port != -1 ===============
+            # callback = VisdomLogger(port=args.visdom_port) if use_callback else None
+            callback = None
+
+            # ===========  Initialize the classifier + prototypes + F/B parameter Π ===============
+            classifier = Classifier(args)
+            classifier.init_prototypes(features_s, features_q, gt_s, gt_q, classes, callback)
+            batch_deltas = classifier.compute_FB_param(features_q=features_q, gt_q=gt_q)
+            deltas_init[run, e, :] = batch_deltas.cpu()
+
+            # =========== Perform RePRI inference ===============
+
+            # train the one layer classifier to learn the optimal average prototype in the support images
+            batch_deltas = classifier.RePRI(features_s, features_q, gt_s, gt_q, classes, n_shots, callback)
+            deltas_final[run, e, :] = batch_deltas
+
+            # perform actual inference on the query image with the prototype learnt from the support shots
+            logits = classifier.get_logits(features_q)  # [n_tasks, shot, h, w]
+            logits = F.interpolate(logits,
+                                    size=(H, W),
+                                    mode='bilinear',
+                                    align_corners=True) # upsample the logit score to the original image size
+            probas = classifier.get_probas(logits).detach() # get the probabilty at each spatial location
+            intersection, union, _ = batch_intersectionAndUnionGPU(probas, gt_q, 2)  # [n_tasks, shot, num_class]
+            intersection, union = intersection.cpu(), union.cpu()
+
+            # ================== Log metrics ==================
+            one_hot_gt = to_one_hot(gt_q, 2)
+            valid_pixels = gt_q != 255
+            loss = classifier.get_ce(probas, valid_pixels, one_hot_gt, reduction='mean')
+            loss_meter.update(loss.item())
+            for i, task_classes in enumerate(classes):
+                for j, class_ in enumerate(task_classes):
+                    cls_intersection[class_] += intersection[i, 0, j + 1]  # Do not count background
+                    cls_union[class_] += union[i, 0, j + 1]
+
+            for class_ in cls_union:
+                IoU[class_] = cls_intersection[class_] / (cls_union[class_] + 1e-10)
+
+            if (iter_num % 200 == 0):
+                mIoU = np.mean([IoU[i] for i in IoU])
+                print('Test: [{}/{}] '
+                    'mIoU {:.4f} '
+                    'Loss {loss_meter.val:.4f} ({loss_meter.avg:.4f}) '.format(iter_num,
+                                                                            args.test_num,
+                                                                            mIoU,
+                                                                            loss_meter=loss_meter,
+                                                                            ))
+            # ================== Visualization ==================
+            # if args.visu:
+            #     root = os.path.join('plots', 'episodes')
+            #     os.makedirs(root, exist_ok=True)
+            #     save_path = os.path.join(root, f'run_{run}_episode_{e}.pdf')
+            #     make_episode_visualization(img_s=spprt_imgs[0].cpu().numpy(),
+            #                             img_q=qry_img[0].cpu().numpy(),
+            #                             gt_s=s_label[0].cpu().numpy(),
+            #                             gt_q=q_label[0].cpu().numpy(),
+            #                             preds=probas[-1].cpu().numpy(),
+            #                             save_path=save_path)
+
+        mIoU = np.mean(list(IoU.values()))
+        print('mIoU---Val result: mIoU {:.4f}.'.format(mIoU))
+        for class_ in cls_union:
+            print("Class {} : {:.4f}".format(class_, IoU[class_]))
+
+        val_IoUs[run] = mIoU
+        val_losses[run] = loss_meter.avg
+
+    print('Average mIoU over {} runs --- {:.4f}.'.format(args.n_runs, val_IoUs.mean()))
+    print('Average runtime / run --- {:.4f}.'.format(runtimes.mean()))
+
+    return val_IoUs.mean(), val_losses.mean()
 
 def load_checkpoint(module_def):
     return module_def.load_from_checkpoint(
@@ -267,6 +449,7 @@ def test(args):
 
     Evaluator.initialize()
     if args.backbone in ["clip_resnet101"]:
+        # pascal and imagenet use the same norm and mean
         FSSDataset.initialize(img_size=480, datapath=args.datapath, use_original_imgsize=False, imagenet_norm=True)
     else:
         FSSDataset.initialize(img_size=480, datapath=args.datapath, use_original_imgsize=False)
@@ -274,6 +457,8 @@ def test(args):
     # dataloader
     args.benchmark = args.dataset
     dataloader = FSSDataset.build_dataloader(args.benchmark, args.bsz, args.nworker, args.fold, 'test', args.nshot)
+
+    # TODO: replace the following code with episodic_validate
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     if device == 'cuda':

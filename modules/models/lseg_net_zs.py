@@ -173,7 +173,7 @@ class LSeg(BaseModel):
             label[1] = self.label_list[class_i]
             text = clip.tokenize(label)
             self.texts.append(text)
-
+        
     def forward(self, x, class_info):
         texts = [self.texts[class_i] for class_i in class_info]
         
@@ -297,7 +297,7 @@ class LSegRN(BaseModel):
             text = clip.tokenize(label)
             self.texts.append(text)
 
-    def forward(self, x, class_info):
+    def extract_features(self, x, class_info):
         texts = [self.texts[class_i] for class_i in class_info]
         
         if self.channels_last == True:
@@ -329,6 +329,44 @@ class LSegRN(BaseModel):
         # normalized features
         image_features = [image_feature / image_feature.norm(dim=-1, keepdim=True) for image_feature in image_features]
         text_features = [text_feature / text_feature.norm(dim=-1, keepdim=True) for text_feature in text_features]
+    
+        return image_features, text_features, imshape
+
+    def forward(self, x, class_info):
+        # texts = [self.texts[class_i] for class_i in class_info]
+        
+        # if self.channels_last == True:
+        #     x.contiguous(memory_format=torch.channels_last)
+
+        # layer_1 = self.pretrained.layer1(x)
+        # layer_2 = self.pretrained.layer2(layer_1)
+        # layer_3 = self.pretrained.layer3(layer_2)
+        # layer_4 = self.pretrained.layer4(layer_3)
+
+        # layer_1_rn = self.scratch.layer1_rn(layer_1)
+        # layer_2_rn = self.scratch.layer2_rn(layer_2)
+        # layer_3_rn = self.scratch.layer3_rn(layer_3)
+        # layer_4_rn = self.scratch.layer4_rn(layer_4)
+
+        # path_4 = self.scratch.refinenet4(layer_4_rn)
+        # path_3 = self.scratch.refinenet3(path_4, layer_3_rn)
+        # path_2 = self.scratch.refinenet2(path_3, layer_2_rn)
+        # path_1 = self.scratch.refinenet1(path_2, layer_1_rn)
+
+        # self.logit_scale = self.logit_scale.to(x.device)
+        # text_features = [self.clip_pretrained.encode_text(text.to(x.device)) for text in texts]
+
+        # image_features = self.scratch.head1(path_1)
+
+        # imshape = image_features.shape
+        # image_features = [image_features[i].unsqueeze(0).permute(0,2,3,1).reshape(-1, self.out_c) for i in range(len(image_features))]
+
+        # # normalized features
+        # image_features = [image_feature / image_feature.norm(dim=-1, keepdim=True) for image_feature in image_features]
+        # text_features = [text_feature / text_feature.norm(dim=-1, keepdim=True) for text_feature in text_features]
+
+        image_features, text_features, imshape = self.extract_features(x, class_info)
+
         
         # logits_per_images = [self.logit_scale * image_feature.half() @ text_feature.t() for image_feature, text_feature in zip(image_features, text_features)]
         logits_per_images = [self.logit_scale * image_feature @ text_feature.t() for image_feature, text_feature in zip(image_features, text_features)]

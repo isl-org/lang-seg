@@ -19,13 +19,11 @@ class FSSDataset:
         if imagenet_norm:
             cls.img_mean = [0.485, 0.456, 0.406]
             cls.img_std = [0.229, 0.224, 0.225]
-            print('use norm: {}, {}'.format(cls.img_mean, cls.img_std))
         else:
             cls.img_mean = [0.5] * 3
             cls.img_std = [0.5] * 3
-            # TODO: should i change it to the pascal version?
-            print('use norm: {}, {}'.format(cls.img_mean, cls.img_std))
-
+        print('use norm: {}, {}'.format(cls.img_mean, cls.img_std))
+        
         cls.datapath = datapath
         cls.use_original_imgsize = use_original_imgsize
 
