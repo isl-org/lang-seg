@@ -298,7 +298,7 @@ class LSegmentationRePRIModule(LSegmentationModule):
                 # =========== Create a callback is args.visdom_port != -1 ===============
                 callback = VisdomLogger(port=args.visdom_port) if use_callback else None
 
-                repri_args = {}
+                repri_args = {} # TODO: prepare a list of properties used in RePRI
                 self.RePRI_inference(repri_args)
 
             
