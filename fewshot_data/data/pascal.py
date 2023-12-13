@@ -32,7 +32,7 @@ class DatasetPASCAL(Dataset):
     def __getitem__(self, idx):
         idx %= len(self.img_metadata)  # for testing, as n_images < 1000
         query_name, support_names, class_sample = self.sample_episode(idx)
-        query_img, query_cmask, support_imgs, support_cmasks, org_qry_imsize = self.load_frame(query_name, support_names)
+        query_img, query_cmask, support_imgs, support_cmasks, org_qry_imsize = self.load_frame(query_name, support_names) # cmask stands for class mask
 
         query_img = self.transform(query_img)
         if not self.use_original_imgsize:
@@ -40,6 +40,7 @@ class DatasetPASCAL(Dataset):
         query_mask, query_ignore_idx = self.extract_ignore_idx(query_cmask.float(), class_sample)
         
         if self.shot:
+            # keep all the support images into one tensor
             support_imgs = torch.stack([self.transform(support_img) for support_img in support_imgs])
 
             support_masks = []
@@ -49,28 +50,33 @@ class DatasetPASCAL(Dataset):
                 support_mask, support_ignore_idx = self.extract_ignore_idx(scmask, class_sample)
                 support_masks.append(support_mask)
                 support_ignore_idxs.append(support_ignore_idx)
+            
+            # keep all the support masks as one tensors
             support_masks = torch.stack(support_masks)
             support_ignore_idxs = torch.stack(support_ignore_idxs)
         else:
             support_masks = []
             support_ignore_idxs = []
+        
+        # use this batch information for testing
         batch = {'query_img': query_img,
-                 'query_mask': query_mask,
-                 'query_name': query_name,
-                 'query_ignore_idx': query_ignore_idx,
+                'query_mask': query_mask,
+                'query_name': query_name,
+                'query_ignore_idx': query_ignore_idx,
 
-                 'org_query_imsize': org_qry_imsize,
+                'org_query_imsize': org_qry_imsize,
 
-                 'support_imgs': support_imgs,
-                 'support_masks': support_masks,
-                 'support_names': support_names,
-                 'support_ignore_idxs': support_ignore_idxs,
+                'support_imgs': support_imgs,
+                'support_masks': support_masks,
+                'support_names': support_names,
+                'support_ignore_idxs': support_ignore_idxs,
 
-                 'class_id': torch.tensor(class_sample)}
+                'class_id': torch.tensor(class_sample)}
 
         return batch
 
     def extract_ignore_idx(self, mask, class_id):
+        # only get the class of interest here
         boundary = (mask / 255).floor()
         mask[mask != class_id + 1] = 0
         mask[mask == class_id + 1] = 1
@@ -97,11 +103,16 @@ class DatasetPASCAL(Dataset):
         return Image.open(os.path.join(self.img_path, img_name) + '.jpg')
 
     def sample_episode(self, idx):
+        # return a triple of the query image name (1 image), support image names (length of self.shot), class (one label)
+
+        # recall img_metadata is a list of tuples
         query_name, class_sample = self.img_metadata[idx]
 
         support_names = []
         if self.shot:
             while True:  # keep sampling support set if query == support
+
+                # sample the image that contains the corresponding query class with no replacement
                 support_name = np.random.choice(self.img_metadata_classwise[class_sample], 1, replace=False)[0]
                 if query_name != support_name: support_names.append(support_name)
                 if len(support_names) == self.shot: break
@@ -109,10 +120,15 @@ class DatasetPASCAL(Dataset):
         return query_name, support_names, class_sample
 
     def build_class_ids(self):
+        # each fold has different number of classes
         nclass_trn = self.nclass // self.nfolds
+
+        # train fold i has the same set of classes as val fold i
+        # note that the class id starts from 0 => that is why you minus 1 in build_img_metadata function
         class_ids_val = [self.fold * nclass_trn + i for i in range(nclass_trn)]
         class_ids_trn = [x for x in range(self.nclass) if x not in class_ids_val]
-
+        
+        # return the fold of interest only.
         if self.split == 'trn':
             return class_ids_trn
         else:
@@ -124,13 +140,15 @@ class DatasetPASCAL(Dataset):
             fold_n_metadata = os.path.join('fewshot_data/data/splits/pascal/%s/fold%d.txt' % (split, fold_id))
             with open(fold_n_metadata, 'r') as f:
                 fold_n_metadata = f.read().split('\n')[:-1]
+
+            # note that data.split('__')[0] is the image name and int(data.split('__')[1]) is the class id but minus 1 here
             fold_n_metadata = [[data.split('__')[0], int(data.split('__')[1]) - 1] for data in fold_n_metadata]
             return fold_n_metadata
 
         img_metadata = []
         if self.split == 'trn':  # For training, read image-metadata of "the other" folds
             for fold_id in range(self.nfolds):
-                if fold_id == self.fold:  # Skip validation fold
+                if fold_id == self.fold:  # Skip validation fold, the rest of the three folds
                     continue
                 img_metadata += read_metadata(self.split, fold_id)
         elif self.split == 'val':  # For validation, read image-metadata of "current" fold
@@ -140,9 +158,11 @@ class DatasetPASCAL(Dataset):
 
         print('Total (%s) images are : %d' % (self.split, len(img_metadata)))
 
+        # this return a list of tuples of (image id, class id)
         return img_metadata
 
     def build_img_metadata_classwise(self):
+        # collect all images of the same class into its dictionary key
         img_metadata_classwise = {}
         for class_id in range(self.nclass):
             img_metadata_classwise[class_id] = []

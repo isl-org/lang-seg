@@ -228,10 +228,8 @@ class Options:
         return args
 
 
-def test(args):
-    module_def = LSegModuleZS
-
-    module = module_def.load_from_checkpoint(
+def load_checkpoint(module_def):
+    return module_def.load_from_checkpoint(
         checkpoint_path=args.weights,
         data_path=args.datapath,
         dataset=args.dataset,
@@ -263,11 +261,16 @@ def test(args):
         activation=args.activation,
     )
 
+def test(args):
+    module_def = LSegModuleZS
+    module = load_checkpoint(module_def)
+
     Evaluator.initialize()
     if args.backbone in ["clip_resnet101"]:
         FSSDataset.initialize(img_size=480, datapath=args.datapath, use_original_imgsize=False, imagenet_norm=True)
     else:
         FSSDataset.initialize(img_size=480, datapath=args.datapath, use_original_imgsize=False)
+
     # dataloader
     args.benchmark = args.dataset
     dataloader = FSSDataset.build_dataloader(args.benchmark, args.bsz, args.nworker, args.fold, 'test', args.nshot)
@@ -277,15 +280,6 @@ def test(args):
         model = module.net.eval().cuda()
     else:
         model = module.net.eval().cpu()
-    # model = module.net.model.cpu()
-
-    print(model)
-
-    scales = (
-        [0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25]
-        if args.dataset == "citys"
-        else [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]
-    )  
 
     f = open("logs/fewshot/log_fewshot-test_nshot{}_{}.txt".format(args.nshot, args.dataset), "a+")
 
@@ -299,6 +293,8 @@ def test(args):
         image = batch['query_img']
         target = batch['query_mask']
         class_info = batch['class_id']
+
+        # get support images from the batch
 
         # pred_mask = evaluator.parallel_forward(image, class_info)
         pred_mask = model(image, class_info)
