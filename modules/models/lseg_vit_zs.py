@@ -742,7 +742,9 @@ def _make_pretrained_clip_vitb_rn50_384(
 def _make_pretrained_clip_rn101(
     pretrained, 
 ):
-    clip_pretrained, _ = clip.load("ViT-B/32", device='cuda', jit=False)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    clip_pretrained, _ = clip.load("ViT-B/32", device=device, jit=False)
     resnet = models.resnet101(pretrained=pretrained)
     pretrained = _make_resnet_backbone(resnet)
     return clip_pretrained, pretrained

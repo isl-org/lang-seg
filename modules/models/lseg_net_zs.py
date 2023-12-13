@@ -330,7 +330,8 @@ class LSegRN(BaseModel):
         image_features = [image_feature / image_feature.norm(dim=-1, keepdim=True) for image_feature in image_features]
         text_features = [text_feature / text_feature.norm(dim=-1, keepdim=True) for text_feature in text_features]
         
-        logits_per_images = [self.logit_scale * image_feature.half() @ text_feature.t() for image_feature, text_feature in zip(image_features, text_features)]
+        # logits_per_images = [self.logit_scale * image_feature.half() @ text_feature.t() for image_feature, text_feature in zip(image_features, text_features)]
+        logits_per_images = [self.logit_scale * image_feature @ text_feature.t() for image_feature, text_feature in zip(image_features, text_features)]
         outs = [logits_per_image.float().view(1, imshape[2], imshape[3], -1).permute(0,3,1,2) for logits_per_image in logits_per_images]
         out = torch.cat([out for out in outs], dim=0)
 

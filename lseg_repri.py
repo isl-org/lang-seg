@@ -326,7 +326,6 @@ def test(args):
     f.close()
                 
 
-
 if __name__ == "__main__":
     args = Options().parse()
     torch.manual_seed(args.seed)

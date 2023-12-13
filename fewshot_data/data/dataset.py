@@ -23,6 +23,7 @@ class FSSDataset:
         else:
             cls.img_mean = [0.5] * 3
             cls.img_std = [0.5] * 3
+            # TODO: should i change it to the pascal version?
             print('use norm: {}, {}'.format(cls.img_mean, cls.img_std))
 
         cls.datapath = datapath
