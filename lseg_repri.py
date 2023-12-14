@@ -6,17 +6,12 @@ import numpy as np
 from tqdm import tqdm
 import torch
 import torch.nn.functional as F
-import torch.nn as nn
 from modules.lseg_module_zs import LSegModuleZS
-from additional_utils.models import LSeg_MultiEvalModule
-from fewshot_data.common.logger import Logger# AverageMeter
-from fewshot_data.common.vis import Visualizer
 from fewshot_data.common.evaluation import Evaluator
-from fewshot_data.common import utils
 from fewshot_data.data.dataset import FSSDataset
 from repri_classifier import Classifier, batch_intersectionAndUnionGPU, to_one_hot
 from types import SimpleNamespace
-import torch.distributed as dist
+import pandas as pd
 
 LAB_COMPUTER_ENV = False
 
@@ -513,22 +508,37 @@ def test(args):
     #   cls_visdom_freq: 5
 
     # RePRI inference
-    episodic_validate(SimpleNamespace(**params))
+    mIoU, losses = episodic_validate(SimpleNamespace(**params))
+    return mIoU
+
 
 def hyperparameter_tuning():
     # hyperparameter space
     # shots = [1, 2, 5, 10] # CUDA out of memory for 5 and 10
     shots = [1, 2]
-    temperatures = [0.1, 2, 8, 16, 20]
-    iterations = [20, 30, 50]
-    learning_rates = [0.0001, 0.001, 0.01, 0.02]
+    temperatures = [0.1, 4, 16, 20]
+    iterations = [30, 50]
+    learning_rates = [0.001, 0.01, 0.02]
     fb_params = [[10], [20]]
-    fb_params_types = ['joe', 'oracle']
+    fb_params_types = ['joe'] # 'oracle'
+    fold = [0]
+    weights_path = ['./checkpoints/pascal_fold0.ckpt']
+
+
     # with_text_embeddings = [True, False]
 
     # perform experiment on each fold
-    fold = [0,1,2,3]
-    weights_path = ['./checkpoints/pascal_fold0.ckpt', './checkpoints/pascal_fold1.ckpt', './checkpoints/pascal_fold2.ckpt', './checkpoints/pascal_fold3.ckpt']
+    # fold = [0,1,2,3]
+    # weights_path = ['./checkpoints/pascal_fold0.ckpt', './checkpoints/pascal_fold1.ckpt', './checkpoints/pascal_fold2.ckpt', './checkpoints/pascal_fold3.ckpt']
+
+    shots_col_data = []
+    tmp_col_data = []
+    lr_col_data = []
+    fb_params_data = []
+    fb_type_data = []
+    fold_data = []
+    miou_data = []
+    col_names = ['n_shots', 'temperature', 'learning_rate', 'fb_params', 'fb_type', 'fold', 'mIoU']
 
     hy_params = itertools.product(shots, temperatures, iterations, learning_rates, fb_params, fb_params_types, zip(fold, weights_path))
     for shot, tmp, iter, lr, fb_updates, fb_type, (f, weights) in hy_params:
@@ -548,7 +558,21 @@ def hyperparameter_tuning():
         args.weights = weights
 
         # run the test
-        test(args)
+        miou = test(args)
+
+        # store column data for excel
+        shots_col_data.append(shot)
+        tmp_col_data.append(tmp)
+        lr_col_data.append(lr)
+        fb_params_data.append(fb_updates)
+        fb_type_data.append('non-oracle' if 'oracle' not in fb_type else 'oracle')
+        fold_data.append(f)
+        miou_data.append(miou)
+
+    # Create DataFrame from multiple lists
+    df = pd.DataFrame(list(zip(shots_col_data, tmp_col_data, lr_col_data, fb_params_data, fb_type_data, fold_data, miou_data)), columns=col_names)
+    df.to_excel('./fold{}_fbType{}_{}.xlsx'.format(fold[0], 'nonOracle' if 'oracle' not in fb_params_types[0] else 'oracle', ''))
+
 
 if __name__ == "__main__":
     # args = Options().parse()
