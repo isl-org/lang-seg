@@ -544,7 +544,7 @@ def hyperparameter_tuning():
         test(args)
 
 if __name__ == "__main__":
-    # args = Options().parse()
+    args = Options().parse()
     # torch.manual_seed(args.seed)
     # args.temp = 20
     # args.adapt_iter = 50
