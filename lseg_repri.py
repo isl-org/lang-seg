@@ -517,9 +517,10 @@ def hyperparameter_tuning():
     learning_rates = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.02]
     fb_params = [[10], [20]] # TODO:
     fb_params_types = ['joe', 'oracle']
+    with_text_embeddings = [True, False]
 
-    hy_params = itertools.product(shots, temperatures, iterations, learning_rates, fb_params, fb_params_types)
-    for shot, tmp, iter, lr, fb_updates, fb_type in hy_params:
+    hy_params = itertools.product(shots, temperatures, iterations, learning_rates, fb_params, fb_params_types, with_text_embeddings)
+    for shot, tmp, iter, lr, fb_updates, fb_type, with_t in hy_params:
         args = Options().parse()
         torch.manual_seed(args.seed)
         
@@ -530,6 +531,7 @@ def hyperparameter_tuning():
         args.cls_lr = lr
         args.fb_updates = fb_updates
         args.fb_type = fb_type
+        args.with_text_embedding = with_t
 
         # run the test
         test(args)
