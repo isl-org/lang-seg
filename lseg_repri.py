@@ -206,7 +206,7 @@ class Options:
         parser.add_argument(
             '--nshot', 
             type=int, 
-            default=3
+            default=5
             )
         parser.add_argument(
             '--fold', 
@@ -454,7 +454,7 @@ def load_checkpoint(module_def):
 def test(args):
     assert(args.backbone == 'clip_resnet101')
     module_def = LSegModuleZS
-    module = load_checkpoint(module_def)
+    module = load_checkpoint(module_def, args)
 
     Evaluator.initialize()
     image_size = 480
@@ -486,14 +486,14 @@ def test(args):
         'val_loader': iter(dataloader),
         'benchmark': args.dataset, # pascal
         # the following are for the RePRI classifier
-        'temperature': 20,
-        'adapt_iter': 50,
+        'temperature': args.temp,
+        'adapt_iter': args.adapt_iter,
         'weights': [1.0, 'auto', 'auto'],
-        'cls_lr': 0.02,
-        'FB_param_update': [10, 20, 30, 40],
+        'cls_lr': args.cls_lr,
+        'FB_param_update': args.fb_updates,
         'cls_visdom_freq': 5, # might not need it
         # NOTE: we only need the following when it is a oracle experiment
-        'FB_param_type': 'joe', 
+        'FB_param_type': args.fb_type, 
         'FB_param_noise': 0
     }
 
@@ -511,19 +511,24 @@ def test(args):
     episodic_validate(SimpleNamespace(**params))
 
 def hyperparameter_tuning():
-    shots = [1, 2, 5, 10, 20]
+    # hyperparameter space
+    shots = [1, 2, 5, 10]
     temperatures = [0.1, 0.5, 2, 8, 16, 20, 40]
-    iterations = [5, 10, 20, 30, 40, 50, 60, 70, 80]
+    iterations = [5, 10, 30, 50, 70, 80]
     learning_rates = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.02]
     fb_params = [[10], [20]] # TODO:
     fb_params_types = ['joe', 'oracle']
     with_text_embeddings = [True, False]
 
-    hy_params = itertools.product(shots, temperatures, iterations, learning_rates, fb_params, fb_params_types, with_text_embeddings)
-    for shot, tmp, iter, lr, fb_updates, fb_type, with_t in hy_params:
+    # perform experiment on each fold
+    fold = [0,1,2,3]
+    weights_path = ['./checkpoints/pascal_fold0.ckpt', './checkpoints/pascal_fold1.ckpt', './checkpoints/pascal_fold2.ckpt', './checkpoints/pascal_fold3.ckpt']
+
+    hy_params = itertools.product(shots, temperatures, iterations, learning_rates, fb_params, fb_params_types, with_text_embeddings, zip(fold, weights_path))
+    for shot, tmp, iter, lr, fb_updates, fb_type, with_t, (f, weights) in hy_params:
         args = Options().parse()
         torch.manual_seed(args.seed)
-        
+
         # classifier hyper parameter changing
         args.nshot = shot
         args.temp = tmp
@@ -532,11 +537,19 @@ def hyperparameter_tuning():
         args.fb_updates = fb_updates
         args.fb_type = fb_type
         args.with_text_embedding = with_t
+        args.fold = f
+        args.weights = weights
 
         # run the test
         test(args)
 
 if __name__ == "__main__":
-    args = Options().parse()
-    torch.manual_seed(args.seed)
-    test(args)
+    # args = Options().parse()
+    # torch.manual_seed(args.seed)
+    # args.temp = 20
+    # args.adapt_iter = 50
+    # args.fb_updates = [10, 30]
+    # args.fb_type = 'joe'
+    # test(args)
+
+    hyperparameter_tuning()
