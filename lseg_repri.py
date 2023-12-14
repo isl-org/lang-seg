@@ -514,9 +514,9 @@ def hyperparameter_tuning():
     # hyperparameter space
     shots = [1, 2, 5, 10]
     temperatures = [0.1, 0.5, 2, 8, 16, 20, 40]
-    iterations = [5, 10, 30, 50, 70, 80]
+    iterations = [30, 50, 70]
     learning_rates = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.02]
-    fb_params = [[10], [20]] # TODO:
+    fb_params = [[10], [20]]
     fb_params_types = ['joe', 'oracle']
     with_text_embeddings = [True, False]
 
