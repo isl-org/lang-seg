@@ -270,16 +270,11 @@ def episodic_validate(args):
 
     # ========== Metrics initialization  ==========    
     H, W = args.image_size, args.image_size
-    # c = model.module.bottleneck_dim
-    # get the feature size TODO: COMPLETED
-    # h = model.module.feature_res[0]
-    # w = model.module.feature_res[1]
     c = 512
     h = 240
     w = 240
 
     # intialize the container to store the results
-    runtimes = torch.zeros(args.n_runs)
     deltas_init = torch.zeros((args.n_runs, nb_episodes, args.batch_size_val))
     deltas_final = torch.zeros((args.n_runs, nb_episodes, args.batch_size_val))
     val_IoUs = np.zeros(args.n_runs)
@@ -425,7 +420,6 @@ def episodic_validate(args):
         val_losses[run] = loss_meter.avg
 
     print('Average mIoU over {} runs --- {:.4f}.'.format(args.n_runs, val_IoUs.mean()))
-    print('Average runtime / run --- {:.4f}.'.format(runtimes.mean()))
 
     return val_IoUs.mean(), val_losses.mean()
 
@@ -484,8 +478,8 @@ def test(args):
     
     # TODO: 
     # 1. try one-shot with text embedding and without text embedding; 
-    # 2. try different combination of adapt_iter, lr, and param updates (the frequency); 
-    # 3. try the same set of hyperparameters with oracle
+    # 2. try different combination of adapt_iter, lr, and param updates (the frequency);  DONE
+    # 3. try the same set of hyperparameters with oracle DONE
     # 4. try with and without the shannon entropy and/or KL divergence
     params = {
         'module': module,
