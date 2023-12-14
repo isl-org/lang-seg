@@ -481,7 +481,7 @@ def test(args):
         'image_size':  image_size,
         'test_num': len(dataset.img_metadata), # total number of test cases
         'batch_size_val': 10, # NOTE: this is different than the args.bsz
-        'n_runs': 1, # repeat the experiment 1 time
+        'n_runs': args.n_run, # repeat the experiment 1 time
         'shot': args.nshot,
         'val_loader': iter(dataloader),
         'benchmark': args.dataset, # pascal
@@ -523,7 +523,7 @@ def hyperparameter_tuning():
     fb_params_types = ['joe'] # 'oracle'
     fold = [0]
     weights_path = ['./checkpoints/pascal_fold0.ckpt']
-
+    RUNS = 2 # this is the same across all experiments
 
     # with_text_embeddings = [True, False]
 
@@ -547,6 +547,7 @@ def hyperparameter_tuning():
         torch.manual_seed(args.seed)
 
         # classifier hyper parameter changing
+        args.n_run = RUNS
         args.nshot = shot
         args.temp = tmp
         args.adapt_iter = iter
@@ -571,7 +572,7 @@ def hyperparameter_tuning():
 
     # Create DataFrame from multiple lists
     df = pd.DataFrame(list(zip(shots_col_data, tmp_col_data, lr_col_data, fb_params_data, fb_type_data, fold_data, miou_data)), columns=col_names)
-    df.to_excel('./fold{}_fbType{}_{}.xlsx'.format(fold[0], 'nonOracle' if 'oracle' not in fb_params_types[0] else 'oracle', ''))
+    df.to_excel('./fold{}_nRun{}_fbType{}_{}.xlsx'.format(fold[0], args.n_run, 'nonOracle' if 'oracle' not in fb_params_types[0] else 'oracle', ''))
 
 
 if __name__ == "__main__":
