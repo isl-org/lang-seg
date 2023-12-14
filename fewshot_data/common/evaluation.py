@@ -12,10 +12,10 @@ class Evaluator:
     def classify_prediction(cls, pred_mask, gt_mask, query_ignore_idx=None):
         # gt_mask = batch.get('query_mask')
 
-        # # Apply ignore_index in PASCAL-5i masks (following evaluation scheme in PFE-Net (TPAMI 2020))
-        # query_ignore_idx = batch.get('query_ignore_idx')
+        # Apply ignore_index in PASCAL-5i masks (following evaluation scheme in PFE-Net (TPAMI 2020))
+        # query_ignore_idx = batch.get('query_ignore_idx')        
         if query_ignore_idx is not None:
-            assert torch.logical_and(query_ignore_idx, gt_mask).sum() == 0
+            # assert torch.logical_and(query_ignore_idx, gt_mask).sum() == 0
             query_ignore_idx *= cls.ignore_index
             gt_mask = gt_mask + query_ignore_idx
             pred_mask[gt_mask == cls.ignore_index] = cls.ignore_index

@@ -8,13 +8,32 @@ import torch.nn.functional as F
 import torch.nn as nn
 from modules.lseg_module_zs import LSegModuleZS
 from additional_utils.models import LSeg_MultiEvalModule
-from fewshot_data.common.logger import Logger, AverageMeter
+from fewshot_data.common.logger import Logger# AverageMeter
 from fewshot_data.common.vis import Visualizer
 from fewshot_data.common.evaluation import Evaluator
 from fewshot_data.common import utils
 from fewshot_data.data.dataset import FSSDataset
 from repri_classifier import Classifier, batch_intersectionAndUnionGPU, to_one_hot
 from types import SimpleNamespace
+import torch.distributed as dist
+
+
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
 
 
 class Options:
@@ -186,7 +205,7 @@ class Options:
         parser.add_argument(
             '--nshot', 
             type=int, 
-            default=1
+            default=5
             )
         parser.add_argument(
             '--fold', 
@@ -202,7 +221,7 @@ class Options:
         parser.add_argument(
             '--bsz', 
             type=int, 
-            default=2
+            default=1 # NOTE: always = 1
             )
         parser.add_argument(
             '--benchmark', 
@@ -238,9 +257,9 @@ def episodic_validate(args):
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     if device == 'cuda':
-        model = args.module.scratch.eval().cuda()
+        model = args.module.net.eval().cuda()
     else:
-        model = args.module.scratch.eval().cpu()
+        model = args.module.net.eval().cpu()
 
     # total number of test cases / batch size = number of episode, a episode contains a multiple (query, supports) pairs of random classes
     nb_episodes = int(args.test_num / args.batch_size_val)
@@ -279,7 +298,7 @@ def episodic_validate(args):
 
         for e in tqdm(range(nb_episodes)):
 
-            # NOTE: args.batch_size_val is equivalent to say number of tasks
+            # NOTE: args.batch_size_val is equivalent to say number of pairs/tasks in a batch
             features_s = torch.zeros(args.batch_size_val, args.shot, c, h, w).to(device)
             text_s = torch.zeros(args.batch_size_val, 1, c).to(device) # dim[1] is the label text
             features_q = torch.zeros(args.batch_size_val, 1, c, h, w).to(device)
@@ -294,14 +313,7 @@ def episodic_validate(args):
             with torch.no_grad():
                 for i in range(args.batch_size_val):
                     # load each pair in the episode one by one
-                    try:
-                        # qry_img, q_label, spprt_imgs, s_label, subcls, _, _ = iter_loader.next()
-                        batch = iter_loader.next()
-                    except:
-                        iter_loader = iter(args.val_loader)
-                        # qry_img, q_label, spprt_imgs, s_label, subcls, _, _ = iter_loader.next()
-                        batch = iter_loader.next()
-
+                    batch = next(args.val_loader)
                     qry_img = batch['query_img']
                     q_label = batch['query_mask']
                     spprt_imgs = batch['support_imgs']
@@ -322,12 +334,13 @@ def episodic_validate(args):
 
                     # TODO: merge the text and support image features
                     f_s, t_s, _ = model.extract_features(spprt_imgs.squeeze(0), subcls)
-                    f_q, _, _ = model.extract_features(qry_img)
+                    f_q, _, _ = model.extract_features(qry_img, subcls)
 
                     shot = f_s.size(0)
                     n_shots[i] = shot
                     features_s[i, :shot] = f_s.detach() # add the feature tensor of the shots to the container for each pair in the batch
                     features_q[i] = f_q.detach() # same for the query but only one shot here
+                    t_s = t_s[0]
                     text_s[i] = t_s.detach()
 
                     # store the corresponding labels
@@ -349,7 +362,7 @@ def episodic_validate(args):
             # ===========  Initialize the classifier + prototypes + F/B parameter Π ===============
             classifier = Classifier(args)
             classifier.init_prototypes(features_s, features_q, text_s, gt_s, gt_q, classes, callback)
-            batch_deltas = classifier.compute_FB_param(features_q=features_q, gt_q=gt_q)
+            batch_deltas = classifier.compute_FB_param(features_q, gt_q)
             deltas_init[run, e, :] = batch_deltas.cpu()
 
             # =========== Perform RePRI inference ===============
@@ -364,16 +377,15 @@ def episodic_validate(args):
                                     size=(H, W),
                                     mode='bilinear',
                                     align_corners=True) # upsample the logit score to the original image size
-            probas = classifier.get_probas(logits).detach() # get the probabilty at each spatial location
+            probas = classifier.get_probas(logits).detach() # get the probabilty at each spatial location [n_tasks, shot, num_classes, h, w]
+            intersection, union, _ = batch_intersectionAndUnionGPU(probas, gt_q, 2)  # [n_tasks, shot, num_class]
+            intersection, union = intersection.cpu(), union.cpu()
 
-            # intersection, union, _ = batch_intersectionAndUnionGPU(probas, gt_q, 2)  # [n_tasks, shot, num_class]
-            # intersection, union = intersection.cpu(), union.cpu()
-
-            if args.benchmark == 'pascal' and batch['query_ignore_idx'] is not None:
-                query_ignore_idx = batch['query_ignore_idx']
-                intersection, union = Evaluator.classify_prediction(probas, gt_q, query_ignore_idx)
-            else:
-                intersection, union = Evaluator.classify_prediction(probas, gt_q)
+            # if args.benchmark == 'pascal' and batch['query_ignore_idx'] is not None:
+            #     query_ignore_idx = batch['query_ignore_idx']
+            #     intersection, union = Evaluator.classify_prediction(probas.argmax(dim=2), gt_q, query_ignore_idx)
+            # else:
+            #     intersection, union = Evaluator.classify_prediction(probas, gt_q)
 
             # ================== Log metrics ==================
             one_hot_gt = to_one_hot(gt_q, 2)
@@ -388,7 +400,7 @@ def episodic_validate(args):
             for class_ in cls_union:
                 IoU[class_] = cls_intersection[class_] / (cls_union[class_] + 1e-10)
 
-            if (iter_num % 200 == 0):
+            if (iter_num % 5 == 0):
                 mIoU = np.mean([IoU[i] for i in IoU])
                 print('Test: [{}/{}] '
                     'mIoU {:.4f} '
@@ -471,62 +483,85 @@ def test(args):
         'module': module,
         'image_size':  image_size,
         'test_num': len(dataset.img_metadata), # total number of test cases
-        'batch_size_val': args.bsz,
+        'batch_size_val': 5, # NOTE: this is different than the args.bsz
         'n_runs': 1, # repeat the experiment 1 time
         'shot': args.nshot,
-        'val_loader': dataloader,
-        'benchmark': args.dataset # pascal
+        'val_loader': iter(dataloader),
+        'benchmark': args.dataset, # pascal
+        # the following are for the RePRI classifier
+        'temperature': 20,
+        'adapt_iter': 50,
+        'weights': [1.0, 'auto', 'auto'],
+        'cls_lr': 0.025,
+        'FB_param_update': [10, 20, 30, 40],
+        'cls_visdom_freq': 5, # might not need it
+        # NOTE: we only need the following when it is a oracle experiment
+        'FB_param_type': 'none', 
+        'FB_param_noise': 0
     }
+
+# CLASSIFIER:
+#   distance: cos
+#   temperature: 20.
+#   adapt_iter: 50
+#   FB_param_type: soft
+#   weights: [1.0, 'auto', 'auto']  #  [0.5, 1.0, 0.1]
+#   cls_lr: 0.025
+#   FB_param_update: [10]
+#   cls_visdom_freq: 5
+
 
     # RePRI inference
     episodic_validate(SimpleNamespace(**params))
 
-    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    # if device == 'cuda':
-    #     model = module.net.eval().cuda()
-    # else:
-    #     model = module.net.eval().cpu()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    if device == 'cuda':
+        model = module.net.eval().cuda()
+    else:
+        model = module.net.eval().cpu()
 
-    # f = open("logs/fewshot/log_fewshot-test_nshot{}_{}.txt".format(args.nshot, args.dataset), "a+")
+    f = open("logs/fewshot/log_fewshot-test_nshot{}_{}.txt".format(args.nshot, args.dataset), "a+")
 
-    # utils.fix_randseed(0)
+    utils.fix_randseed(0)
     # average_meter = AverageMeter(dataloader.dataset)
-    # for idx, batch in enumerate(dataloader):
-    #     if torch.cuda.is_available():
-    #         batch = utils.to_cuda(batch)
-    #     else:
-    #         batch = utils.to_cpu(batch)
-    #     image = batch['query_img']
-    #     target = batch['query_mask']
-    #     class_info = batch['class_id']
+    average_meter = AverageMeter()
 
-    #     # pred_mask = evaluator.parallel_forward(image, class_info)
-    #     pred_mask = model(image, class_info)
+    for idx, batch in enumerate(dataloader):
+        if torch.cuda.is_available():
+            batch = utils.to_cuda(batch)
+        else:
+            batch = utils.to_cpu(batch)
+        image = batch['query_img']
+        target = batch['query_mask']
+        class_info = batch['class_id']
+
+        # pred_mask = evaluator.parallel_forward(image, class_info)
+        pred_mask = model(image, class_info)
         
-    #     # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
-    #     assert pred_mask.argmax(dim=1).size() == batch['query_mask'].size()
+        # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
+        assert pred_mask.argmax(dim=1).size() == batch['query_mask'].size()
         
-    #     # 2. Evaluate prediction
-    #     if args.benchmark == 'pascal' and batch['query_ignore_idx'] is not None:
-    #         query_ignore_idx = batch['query_ignore_idx']
-    #         # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
-    #         area_inter, area_union = Evaluator.classify_prediction(pred_mask.argmax(dim=1), target, query_ignore_idx)
-    #     else:
-    #         # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
-    #         area_inter, area_union = Evaluator.classify_prediction(pred_mask.argmax(dim=1), target)
+        # 2. Evaluate prediction
+        if args.benchmark == 'pascal' and batch['query_ignore_idx'] is not None:
+            query_ignore_idx = batch['query_ignore_idx']
+            # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
+            area_inter, area_union = Evaluator.classify_prediction(pred_mask.argmax(dim=1), target, query_ignore_idx)
+        else:
+            # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
+            area_inter, area_union = Evaluator.classify_prediction(pred_mask.argmax(dim=1), target)
 
-    #     average_meter.update(area_inter, area_union, class_info, loss=None)
-    #     average_meter.write_process(idx, len(dataloader), epoch=-1, write_batch_idx=1)
+        average_meter.update(area_inter, area_union, class_info, loss=None)
+        average_meter.write_process(idx, len(dataloader), epoch=-1, write_batch_idx=1)
 
-    # # Write evaluation results
-    # average_meter.write_result('Test', 0)
-    # test_miou, test_fb_iou = average_meter.compute_iou()
+    # Write evaluation results
+    average_meter.write_result('Test', 0)
+    test_miou, test_fb_iou = average_meter.compute_iou()
 
-    # Logger.info('Fold %d, %d-shot ==> mIoU: %5.2f \t FB-IoU: %5.2f' % (args.fold, args.nshot, test_miou.item(), test_fb_iou.item()))
-    # Logger.info('==================== Finished Testing ====================')
-    # f.write('{}\n'.format(args.weights))
-    # f.write('Fold %d, %d-shot ==> mIoU: %5.2f \t FB-IoU: %5.2f\n' % (args.fold, args.nshot, test_miou.item(), test_fb_iou.item()))
-    # f.close()
+    Logger.info('Fold %d, %d-shot ==> mIoU: %5.2f \t FB-IoU: %5.2f' % (args.fold, args.nshot, test_miou.item(), test_fb_iou.item()))
+    Logger.info('==================== Finished Testing ====================')
+    f.write('{}\n'.format(args.weights))
+    f.write('Fold %d, %d-shot ==> mIoU: %5.2f \t FB-IoU: %5.2f\n' % (args.fold, args.nshot, test_miou.item(), test_fb_iou.item()))
+    f.close()
                 
 
 if __name__ == "__main__":

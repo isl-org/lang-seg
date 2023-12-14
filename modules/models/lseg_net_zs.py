@@ -299,6 +299,14 @@ class LSegRN(BaseModel):
             self.texts.append(text)
 
     def extract_features(self, x, class_info):
+
+        # merge the batch and support dimensions to be 4-d tensor
+        # is_support = False
+        # if x.dim() == 5:
+        #     B, S, C, H, W = x.shape
+        #     x = x.view(-1, C, H, W)
+        #     is_support = True
+
         texts = [self.texts[class_i] for class_i in class_info]
         
         if self.channels_last == True:
@@ -324,15 +332,14 @@ class LSegRN(BaseModel):
         # a list of batch-text encodings text_features[i] is the text embeddings for batch i
         text_features = [self.clip_pretrained.encode_text(text.to(x.device)) for text in texts]
         image_features = self.scratch.head1(path_1) # [batch or n_task, c, h, w]
+        
+        # unsqueeze back the batch and shot dimensions
+        # _, C, H, W = image_features.shape
+        # if is_support:
+        #     image_features = image_features.reshape((B, S, C, H, W))
 
         imshape = image_features.shape
-        # seperate the batch into a list of per-image features
-        image_features = [image_features[i].unsqueeze(0).permute(0,2,3,1).reshape(-1, self.out_c) for i in range(len(image_features))]
 
-        # normalized features
-        image_features = [image_feature / image_feature.norm(dim=-1, keepdim=True) for image_feature in image_features]
-        text_features = [text_feature / text_feature.norm(dim=-1, keepdim=True) for text_feature in text_features]
-    
         return image_features, text_features, imshape
 
     def forward(self, x, class_info):
@@ -370,6 +377,13 @@ class LSegRN(BaseModel):
 
         image_features, text_features, imshape = self.extract_features(x, class_info)
 
+        # seperate the batch into a list of per-image features
+        image_features = [image_features[i].unsqueeze(0).permute(0,2,3,1).reshape(-1, self.out_c) for i in range(len(image_features))]
+
+        # normalized features
+        image_features = [image_feature / image_feature.norm(dim=-1, keepdim=True) for image_feature in image_features]
+        text_features = [text_feature / text_feature.norm(dim=-1, keepdim=True) for text_feature in text_features]
+    
         
         # logits_per_images = [self.logit_scale * image_feature.half() @ text_feature.t() for image_feature, text_feature in zip(image_features, text_features)]
         logits_per_images = [self.logit_scale * image_feature @ text_feature.t() for image_feature, text_feature in zip(image_features, text_features)]
