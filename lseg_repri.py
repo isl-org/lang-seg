@@ -524,7 +524,7 @@ def hyperparameter_tuning():
     # with_text_embeddings = [True, False]
 
     # hyperparameter space
-    RUNS = 3 # this is the same across all experiments
+    RUNS = 1 # this is the same across all experiments
     shots = [1,2] # number shot outside of this will cause CUDA out of memory
     temperatures = [0.1, 4, 16, 20]
     iterations = [30, 50, 60]
