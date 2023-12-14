@@ -206,7 +206,7 @@ class Options:
         parser.add_argument(
             '--nshot', 
             type=int, 
-            default=1
+            default=3
             )
         parser.add_argument(
             '--fold', 
