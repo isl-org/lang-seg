@@ -18,6 +18,7 @@ from repri_classifier import Classifier, batch_intersectionAndUnionGPU, to_one_h
 from types import SimpleNamespace
 import torch.distributed as dist
 
+LAB_COMPUTER_ENV = False
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -233,8 +234,9 @@ class Options:
         parser.add_argument(
             '--datapath', 
             type=str, 
-            default='E:\jose_tasks\lang-seg\data'
+            default='/Users/maxxyouu/Desktop/lang-seg-fork/data/' if not LAB_COMPUTER_ENV else 'E:\jose_tasks\lang-seg\data'
             # for home use the directory: '/Users/maxxyouu/Desktop/lang-seg-fork/data/'
+            # for lab computer: 'E:\jose_tasks\lang-seg\data'
             )
 
         parser.add_argument(
@@ -330,19 +332,27 @@ def episodic_validate(args):
                     qry_img = qry_img.to(device)
 
                     # get the final feature tensor of the support images and the query image
-                    # TODO: COMPLETED
-                    # f_s = model.module.extract_features(spprt_imgs.squeeze(0)) #[shots, c, h, w]
-                    # f_q = model.module.extract_features(qry_img) #[1, c, h, w]
-
-                    # TODO: merge the text and support image features
-                    f_s, t_s, _ = model.extract_features(spprt_imgs.squeeze(0), subcls)
+                    f_s, t_s, img_shape = model.extract_features(spprt_imgs.squeeze(0), subcls)
                     f_q, _, _ = model.extract_features(qry_img, subcls)
+                    t_s = t_s[-1]
+
+                    # # normalize the support features
+                    # f_s = [f_s[i].unsqueeze(0).permute(0,2,3,1).reshape(-1, c) for i in range(len(f_s))]
+                    # f_s = [(image_feature / image_feature.norm(dim=-1, keepdim=True)).reshape(c, h, w) for image_feature in f_s]
+                    # f_s = torch.stack(f_s, dim=0)
+
+                    # # normalize the query features
+                    # f_q = f_q.permute(0,2,3,1).reshape(-1, c)
+                    # f_q = (f_q / f_q.norm(dim=-1, keepdim=True)).reshape(c, h, w).unsqueeze(0)
+
+                    # # normalize the text features
+                    # t_s = [(text_feature / text_feature.norm(dim=-1, keepdim=True)) for text_feature in t_s]
+                    # t_s = torch.stack(t_s, dim=0)
 
                     shot = f_s.size(0)
                     n_shots[i] = shot
                     features_s[i, :shot] = f_s.detach() # add the feature tensor of the shots to the container for each pair in the batch
                     features_q[i] = f_q.detach() # same for the query but only one shot here
-                    t_s = t_s[0]
                     text_s[i] = t_s.detach()
 
                     # store the corresponding labels
@@ -356,9 +366,9 @@ def episodic_validate(args):
             # if args.norm_feat:
             features_s = F.normalize(features_s, dim=2)
             features_q = F.normalize(features_q, dim=2)
+            text_s = F.normalize(text_s, dim=2)
 
             # =========== Create a callback is args.visdom_port != -1 ===============
-            # callback = VisdomLogger(port=args.visdom_port) if use_callback else None
             callback = None
 
             # ===========  Initialize the classifier + prototypes + F/B parameter Π ===============
@@ -515,9 +525,9 @@ def hyperparameter_tuning():
     # hyperparameter space
     # shots = [1, 2, 5, 10] # CUDA out of memory for 5 and 10
     shots = [1, 2]
-    temperatures = [0.1, 0.5, 2, 8, 16, 20, 40]
-    iterations = [30, 50, 70]
-    learning_rates = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.02]
+    temperatures = [0.1, 2, 8, 16, 20]
+    iterations = [20, 30, 50]
+    learning_rates = [0.0001, 0.001, 0.01, 0.02]
     fb_params = [[10], [20]]
     fb_params_types = ['joe', 'oracle']
     # with_text_embeddings = [True, False]
@@ -528,6 +538,7 @@ def hyperparameter_tuning():
 
     hy_params = itertools.product(shots, temperatures, iterations, learning_rates, fb_params, fb_params_types, zip(fold, weights_path))
     for shot, tmp, iter, lr, fb_updates, fb_type, (f, weights) in hy_params:
+        print('nshot-{}; temperature-{}; lr-{}; fb-{}; fb_type-{}; fold-{}'.format(shot, tmp, iter, lr, fb_updates, fb_type, f))
         args = Options().parse()
         torch.manual_seed(args.seed)
 
@@ -546,13 +557,13 @@ def hyperparameter_tuning():
         test(args)
 
 if __name__ == "__main__":
-    args = Options().parse()
-    torch.manual_seed(args.seed)
-    args.temp = 20
-    args.adapt_iter = 50
-    args.fb_updates = [10, 30]
-    args.fb_type = 'joe'
-    args.cls_lr = 0.025
-    test(args)
+    # args = Options().parse()
+    # torch.manual_seed(args.seed)
+    # args.temp = 20
+    # args.adapt_iter = 50
+    # args.fb_updates = [10, 30]
+    # args.fb_type = 'joe'
+    # args.cls_lr = 0.025
+    # test(args)
 
-    # hyperparameter_tuning()
+    hyperparameter_tuning()
