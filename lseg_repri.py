@@ -513,66 +513,66 @@ def test(args):
 
 
 def hyperparameter_tuning():
+    # fold = [0]
+    # weights_path = ['./checkpoints/pascal_fold0.ckpt']
+    # with_text_embeddings = [True, False]
+
     # hyperparameter space
-    # shots = [1, 2, 5, 10] # CUDA out of memory for 5 and 10
-    shots = [1, 2]
+    RUNS = 2 # this is the same across all experiments
+    shots = [1, 2] # number shot outside of this will cause CUDA out of memory
     temperatures = [0.1, 4, 16, 20]
     iterations = [30, 50]
     learning_rates = [0.001, 0.01, 0.02]
     fb_params = [[10], [20]]
     fb_params_types = ['joe'] # 'oracle'
-    fold = [0]
-    weights_path = ['./checkpoints/pascal_fold0.ckpt']
-    RUNS = 2 # this is the same across all experiments
+    folds = [0,1,2,3]
+    weights_paths = ['./checkpoints/pascal_fold0.ckpt', './checkpoints/pascal_fold1.ckpt', './checkpoints/pascal_fold2.ckpt', './checkpoints/pascal_fold3.ckpt']
 
-    # with_text_embeddings = [True, False]
+    for fold, weight_path in zip(folds, weights_paths):
 
-    # perform experiment on each fold
-    # fold = [0,1,2,3]
-    # weights_path = ['./checkpoints/pascal_fold0.ckpt', './checkpoints/pascal_fold1.ckpt', './checkpoints/pascal_fold2.ckpt', './checkpoints/pascal_fold3.ckpt']
+        shots_col_data = []
+        tmp_col_data = []
+        lr_col_data = []
+        fb_params_data = []
+        fb_type_data = []
+        fold_data = []
+        miou_data = []
+        col_names = ['n_shots', 'temperature', 'learning_rate', 'fb_params', 'fb_type', 'fold', 'mIoU']
 
-    shots_col_data = []
-    tmp_col_data = []
-    lr_col_data = []
-    fb_params_data = []
-    fb_type_data = []
-    fold_data = []
-    miou_data = []
-    col_names = ['n_shots', 'temperature', 'learning_rate', 'fb_params', 'fb_type', 'fold', 'mIoU']
+        hy_params = itertools.product(shots, temperatures, iterations, learning_rates, fb_params, fb_params_types)
+        for shot, tmp, iter, lr, fb_updates, fb_type in hy_params:
+            print('nshot-{}; temperature-{}; lr-{}; fb-{}; fb_type-{}; fold-{}'.format(shot, tmp, iter, lr, fb_updates, fb_type, fold))
+            args = Options().parse()
+            torch.manual_seed(args.seed)
 
-    hy_params = itertools.product(shots, temperatures, iterations, learning_rates, fb_params, fb_params_types, zip(fold, weights_path))
-    for shot, tmp, iter, lr, fb_updates, fb_type, (f, weights) in hy_params:
-        print('nshot-{}; temperature-{}; lr-{}; fb-{}; fb_type-{}; fold-{}'.format(shot, tmp, iter, lr, fb_updates, fb_type, f))
-        args = Options().parse()
-        torch.manual_seed(args.seed)
+            # classifier hyper parameter changing
+            args.n_run = RUNS
+            args.nshot = shot
+            args.temp = tmp
+            args.adapt_iter = iter
+            args.cls_lr = lr
+            args.fb_updates = fb_updates
+            args.fb_type = fb_type
+            # args.with_text_embedding = with_t
+            args.fold = fold
+            args.weights = weight_path
 
-        # classifier hyper parameter changing
-        args.n_run = RUNS
-        args.nshot = shot
-        args.temp = tmp
-        args.adapt_iter = iter
-        args.cls_lr = lr
-        args.fb_updates = fb_updates
-        args.fb_type = fb_type
-        # args.with_text_embedding = with_t
-        args.fold = f
-        args.weights = weights
+            # run the test
+            miou = test(args)
 
-        # run the test
-        miou = test(args)
+            # store column data for excel
+            shots_col_data.append(shot)
+            tmp_col_data.append(tmp)
+            lr_col_data.append(lr)
+            fb_params_data.append(fb_updates)
+            fb_type_data.append('non-oracle' if 'oracle' not in fb_type else 'oracle')
+            fold_data.append(fold)
+            miou_data.append(miou)
 
-        # store column data for excel
-        shots_col_data.append(shot)
-        tmp_col_data.append(tmp)
-        lr_col_data.append(lr)
-        fb_params_data.append(fb_updates)
-        fb_type_data.append('non-oracle' if 'oracle' not in fb_type else 'oracle')
-        fold_data.append(f)
-        miou_data.append(miou)
-
-    # Create DataFrame from multiple lists
-    df = pd.DataFrame(list(zip(shots_col_data, tmp_col_data, lr_col_data, fb_params_data, fb_type_data, fold_data, miou_data)), columns=col_names)
-    df.to_excel('./fold{}_nRun{}_fbType{}_{}.xlsx'.format(fold[0], args.n_run, 'nonOracle' if 'oracle' not in fb_params_types[0] else 'oracle', ''))
+        # Create DataFrame from multiple lists
+        df = pd.DataFrame(list(zip(shots_col_data, tmp_col_data, lr_col_data, fb_params_data, fb_type_data, fold_data, miou_data)), columns=col_names)
+        df.to_excel('./fold-{}_nRun-{}_fbType-{}_comment-{}.xlsx'.format(fold, args.n_run, 'nonOracle' if 'oracle' not in fb_params_types[0] else 'oracle', ''))
+        print('===============================Finish writing experiment data for fold {}===================================='.format(fold))
 
 
 if __name__ == "__main__":
