@@ -206,7 +206,7 @@ class Options:
         parser.add_argument(
             '--nshot', 
             type=int, 
-            default=5
+            default=2
             )
         parser.add_argument(
             '--fold', 
@@ -233,7 +233,8 @@ class Options:
         parser.add_argument(
             '--datapath', 
             type=str, 
-            default='/Users/maxxyouu/Desktop/lang-seg-fork/data/'
+            default='E:\jose_tasks\lang-seg\data'
+            # for home use the directory: '/Users/maxxyouu/Desktop/lang-seg-fork/data/'
             )
 
         parser.add_argument(
@@ -353,8 +354,8 @@ def episodic_validate(args):
             
             # =========== Normalize features along channel dimension ===============
             # if args.norm_feat:
-            #     features_s = F.normalize(features_s, dim=2)
-            #     features_q = F.normalize(features_q, dim=2)
+            features_s = F.normalize(features_s, dim=2)
+            features_q = F.normalize(features_q, dim=2)
 
             # =========== Create a callback is args.visdom_port != -1 ===============
             # callback = VisdomLogger(port=args.visdom_port) if use_callback else None
@@ -418,7 +419,7 @@ def episodic_validate(args):
 
     return val_IoUs.mean(), val_losses.mean()
 
-def load_checkpoint(module_def):
+def load_checkpoint(module_def, args):
     return module_def.load_from_checkpoint(
         checkpoint_path=args.weights,
         data_path=args.datapath,
@@ -512,7 +513,8 @@ def test(args):
 
 def hyperparameter_tuning():
     # hyperparameter space
-    shots = [1, 2, 5, 10]
+    # shots = [1, 2, 5, 10] # CUDA out of memory for 5 and 10
+    shots = [1, 2]
     temperatures = [0.1, 0.5, 2, 8, 16, 20, 40]
     iterations = [30, 50, 70]
     learning_rates = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.02]
@@ -545,11 +547,12 @@ def hyperparameter_tuning():
 
 if __name__ == "__main__":
     args = Options().parse()
-    # torch.manual_seed(args.seed)
-    # args.temp = 20
-    # args.adapt_iter = 50
-    # args.fb_updates = [10, 30]
-    # args.fb_type = 'joe'
-    # test(args)
+    torch.manual_seed(args.seed)
+    args.temp = 20
+    args.adapt_iter = 50
+    args.fb_updates = [10, 30]
+    args.fb_type = 'joe'
+    args.cls_lr = 0.025
+    test(args)
 
-    hyperparameter_tuning()
+    # hyperparameter_tuning()
