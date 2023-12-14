@@ -307,7 +307,13 @@ def episodic_validate(args):
             with torch.no_grad():
                 for i in range(args.batch_size_val):
                     # load each pair in the episode one by one
-                    batch = next(args.val_loader)
+                    try:
+                        batch = next(args.val_loader)
+                    except:
+                        # for multiple runs
+                        args.val_loader = iter(args.val_loader)
+                        batch = next(args.val_loader)
+
                     qry_img = batch['query_img']
                     q_label = batch['query_mask']
                     spprt_imgs = batch['support_imgs']
