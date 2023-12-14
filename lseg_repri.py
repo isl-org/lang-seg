@@ -518,14 +518,14 @@ def hyperparameter_tuning():
     learning_rates = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.02]
     fb_params = [[10], [20]]
     fb_params_types = ['joe', 'oracle']
-    with_text_embeddings = [True, False]
+    # with_text_embeddings = [True, False]
 
     # perform experiment on each fold
     fold = [0,1,2,3]
     weights_path = ['./checkpoints/pascal_fold0.ckpt', './checkpoints/pascal_fold1.ckpt', './checkpoints/pascal_fold2.ckpt', './checkpoints/pascal_fold3.ckpt']
 
-    hy_params = itertools.product(shots, temperatures, iterations, learning_rates, fb_params, fb_params_types, with_text_embeddings, zip(fold, weights_path))
-    for shot, tmp, iter, lr, fb_updates, fb_type, with_t, (f, weights) in hy_params:
+    hy_params = itertools.product(shots, temperatures, iterations, learning_rates, fb_params, fb_params_types, zip(fold, weights_path))
+    for shot, tmp, iter, lr, fb_updates, fb_type, (f, weights) in hy_params:
         args = Options().parse()
         torch.manual_seed(args.seed)
 
@@ -536,7 +536,7 @@ def hyperparameter_tuning():
         args.cls_lr = lr
         args.fb_updates = fb_updates
         args.fb_type = fb_type
-        args.with_text_embedding = with_t
+        # args.with_text_embedding = with_t
         args.fold = f
         args.weights = weights
 
