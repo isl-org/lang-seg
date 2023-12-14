@@ -1,4 +1,5 @@
 from collections import defaultdict
+import itertools
 import os
 import argparse
 import numpy as np
@@ -451,16 +452,14 @@ def load_checkpoint(module_def):
     )
 
 def test(args):
+    assert(args.backbone == 'clip_resnet101')
     module_def = LSegModuleZS
     module = load_checkpoint(module_def)
 
     Evaluator.initialize()
     image_size = 480
-    if args.backbone in ["clip_resnet101"]:
-        # pascal and imagenet use the same norm and mean
-        FSSDataset.initialize(img_size=image_size, datapath=args.datapath, use_original_imgsize=False, imagenet_norm=True)
-    else:
-        FSSDataset.initialize(img_size=image_size, datapath=args.datapath, use_original_imgsize=False)
+    # pascal and imagenet use the same norm and mean
+    FSSDataset.initialize(img_size=image_size, datapath=args.datapath, use_original_imgsize=False, imagenet_norm=True)
 
     # dataloader
     args.benchmark = args.dataset
@@ -481,7 +480,7 @@ def test(args):
         'module': module,
         'image_size':  image_size,
         'test_num': len(dataset.img_metadata), # total number of test cases
-        'batch_size_val': 3, # NOTE: this is different than the args.bsz
+        'batch_size_val': 10, # NOTE: this is different than the args.bsz
         'n_runs': 1, # repeat the experiment 1 time
         'shot': args.nshot,
         'val_loader': iter(dataloader),
@@ -494,73 +493,46 @@ def test(args):
         'FB_param_update': [10, 20, 30, 40],
         'cls_visdom_freq': 5, # might not need it
         # NOTE: we only need the following when it is a oracle experiment
-        'FB_param_type': 'oracle', 
+        'FB_param_type': 'joe', 
         'FB_param_noise': 0
     }
 
-# CLASSIFIER:
-#   distance: cos
-#   temperature: 20.
-#   adapt_iter: 50
-#   FB_param_type: soft
-#   weights: [1.0, 'auto', 'auto']  #  [0.5, 1.0, 0.1]
-#   cls_lr: 0.025
-#   FB_param_update: [10]
-#   cls_visdom_freq: 5
-
+    # CLASSIFIER:
+    #   distance: cos
+    #   temperature: 20.
+    #   adapt_iter: 50
+    #   FB_param_type: soft
+    #   weights: [1.0, 'auto', 'auto']  #  [0.5, 1.0, 0.1]
+    #   cls_lr: 0.025
+    #   FB_param_update: [10]
+    #   cls_visdom_freq: 5
 
     # RePRI inference
     episodic_validate(SimpleNamespace(**params))
 
-    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    # if device == 'cuda':
-    #     model = module.net.eval().cuda()
-    # else:
-    #     model = module.net.eval().cpu()
+def hyperparameter_tuning():
+    shots = [1, 2, 5, 10, 20]
+    temperatures = [0.1, 0.5, 2, 8, 16, 20, 40]
+    iterations = [5, 10, 20, 30, 40, 50, 60, 70, 80]
+    learning_rates = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.02]
+    fb_params = [[10], [20]] # TODO:
+    fb_params_types = ['joe', 'oracle']
 
-    # f = open("logs/fewshot/log_fewshot-test_nshot{}_{}.txt".format(args.nshot, args.dataset), "a+")
-
-    # utils.fix_randseed(0)
-    # # average_meter = AverageMeter(dataloader.dataset)
-    # average_meter = AverageMeter()
-
-    # for idx, batch in enumerate(dataloader):
-    #     if torch.cuda.is_available():
-    #         batch = utils.to_cuda(batch)
-    #     else:
-    #         batch = utils.to_cpu(batch)
-    #     image = batch['query_img']
-    #     target = batch['query_mask']
-    #     class_info = batch['class_id']
-
-    #     # pred_mask = evaluator.parallel_forward(image, class_info)
-    #     pred_mask = model(image, class_info)
+    hy_params = itertools.product(shots, temperatures, iterations, learning_rates, fb_params, fb_params_types)
+    for shot, tmp, iter, lr, fb_updates, fb_type in hy_params:
+        args = Options().parse()
+        torch.manual_seed(args.seed)
         
-    #     # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
-    #     assert pred_mask.argmax(dim=1).size() == batch['query_mask'].size()
-        
-    #     # 2. Evaluate prediction
-    #     if args.benchmark == 'pascal' and batch['query_ignore_idx'] is not None:
-    #         query_ignore_idx = batch['query_ignore_idx']
-    #         # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
-    #         area_inter, area_union = Evaluator.classify_prediction(pred_mask.argmax(dim=1), target, query_ignore_idx)
-    #     else:
-    #         # pred_mask.argmax(dim=1) is spatial classifcation of either foreground or background
-    #         area_inter, area_union = Evaluator.classify_prediction(pred_mask.argmax(dim=1), target)
+        # classifier hyper parameter changing
+        args.nshot = shot
+        args.temp = tmp
+        args.adapt_iter = iter
+        args.cls_lr = lr
+        args.fb_updates = fb_updates
+        args.fb_type = fb_type
 
-    #     average_meter.update(area_inter, area_union, class_info, loss=None)
-    #     average_meter.write_process(idx, len(dataloader), epoch=-1, write_batch_idx=1)
-
-    # # Write evaluation results
-    # average_meter.write_result('Test', 0)
-    # test_miou, test_fb_iou = average_meter.compute_iou()
-
-    # Logger.info('Fold %d, %d-shot ==> mIoU: %5.2f \t FB-IoU: %5.2f' % (args.fold, args.nshot, test_miou.item(), test_fb_iou.item()))
-    # Logger.info('==================== Finished Testing ====================')
-    # f.write('{}\n'.format(args.weights))
-    # f.write('Fold %d, %d-shot ==> mIoU: %5.2f \t FB-IoU: %5.2f\n' % (args.fold, args.nshot, test_miou.item(), test_fb_iou.item()))
-    # f.close()
-                
+        # run the test
+        test(args)
 
 if __name__ == "__main__":
     args = Options().parse()

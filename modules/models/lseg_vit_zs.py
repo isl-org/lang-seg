@@ -763,7 +763,7 @@ def _make_resnet_backbone(resnet):
     return pretrained
 
 def _make_pretrained_clip_vitb32_384(pretrained, use_readout="ignore", hooks=None, enable_attention_hooks=False):
-    clip_pretrained, _ = clip.load("ViT-B/32", device='cuda', jit=False)
+    clip_pretrained, _ = clip.load("ViT-B/32", device='cuda' if torch.cuda.is_available() else 'cpu', jit=False)
     if pretrained is True or pretrained is False:
         print('** _make_pretrained_clip_vitb32_384 ==> timm.create_model("vit_base_patch32_384", pretrained={}) **'.format(pretrained))
         model = timm.create_model("vit_base_patch32_384", pretrained=pretrained)
