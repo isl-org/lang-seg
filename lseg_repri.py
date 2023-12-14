@@ -13,7 +13,7 @@ from repri_classifier import Classifier, batch_intersectionAndUnionGPU, to_one_h
 from types import SimpleNamespace
 import pandas as pd
 
-LAB_COMPUTER_ENV = False
+LAB_COMPUTER_ENV = True
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -303,16 +303,16 @@ def episodic_validate(args):
             n_shots = torch.zeros(args.batch_size_val).to(device)
             classes = []  # All classes considered in the tasks
 
-            # =========== Generate tasks and extract features for each task - a pair of query and supports ===============
+            # =========== Generate tasks and extract features for each task - a pair of query and supports ==============
             with torch.no_grad():
                 for i in range(args.batch_size_val):
                     # load each pair in the episode one by one
                     try:
-                        batch = next(args.val_loader)
+                        batch = next(iter_loader)
                     except:
                         # for multiple runs
-                        args.val_loader = iter(args.val_loader)
-                        batch = next(args.val_loader)
+                        iter_loader = iter(args.val_loader)
+                        batch = next(iter_loader)
 
                     qry_img = batch['query_img']
                     q_label = batch['query_mask']
@@ -489,7 +489,7 @@ def test(args):
         'batch_size_val': 10, # NOTE: this is different than the args.bsz
         'n_runs': args.n_run, # repeat the experiment 1 time
         'shot': args.nshot,
-        'val_loader': iter(dataloader),
+        'val_loader': dataloader,
         'benchmark': args.dataset, # pascal
         # the following are for the RePRI classifier
         'temperature': args.temp,
@@ -524,10 +524,10 @@ def hyperparameter_tuning():
     # with_text_embeddings = [True, False]
 
     # hyperparameter space
-    RUNS = 2 # this is the same across all experiments
-    shots = [1, 2] # number shot outside of this will cause CUDA out of memory
+    RUNS = 3 # this is the same across all experiments
+    shots = [1,2] # number shot outside of this will cause CUDA out of memory
     temperatures = [0.1, 4, 16, 20]
-    iterations = [30, 50]
+    iterations = [30, 50, 60]
     learning_rates = [0.001, 0.01, 0.02]
     fb_params = [[10], [20]]
     fb_params_types = ['joe'] # 'oracle'
