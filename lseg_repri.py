@@ -486,7 +486,7 @@ def test(args):
         'module': module,
         'image_size':  image_size,
         'test_num': len(dataset.img_metadata), # total number of test cases
-        'batch_size_val': 10, # NOTE: this is different than the args.bsz
+        'batch_size_val': 2, # NOTE: this is different than the args.bsz
         'n_runs': args.n_run, # repeat the experiment 1 time
         'shot': args.nshot,
         'val_loader': dataloader,
@@ -519,19 +519,19 @@ def test(args):
 
 
 def hyperparameter_tuning():
-    # fold = [0]
-    # weights_path = ['./checkpoints/pascal_fold0.ckpt']
+    # folds = [0]
+    # weights_paths = ['./checkpoints/pascal_fold0.ckpt']
     # with_text_embeddings = [True, False]
 
     # hyperparameter space
     RUNS = 1 # this is the same across all experiments
-    shots = [1,2] # number shot outside of this will cause CUDA out of memory
-    temperatures = [0.1, 4, 16, 20]
-    iterations = [30, 50, 60]
-    learning_rates = [0.001, 0.01, 0.02]
-    fb_params = [[10], [20]]
-    fb_params_types = ['joe'] # 'oracle'
-    folds = [0,1,2,3]
+    shots = [2, 1] # number shot outside of this will cause CUDA out of memory
+    temperatures = [20]
+    iterations = [50]
+    learning_rates = [0.02]
+    fb_params = [[10, 30]]
+    fb_params_types = ['oracle'] # 'oracle'
+    folds = [0, 1,2,3]
     weights_paths = ['./checkpoints/pascal_fold0.ckpt', './checkpoints/pascal_fold1.ckpt', './checkpoints/pascal_fold2.ckpt', './checkpoints/pascal_fold3.ckpt']
 
     for fold, weight_path in zip(folds, weights_paths):
