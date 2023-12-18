@@ -106,40 +106,36 @@ class Classifier(object):
 
     def init_prototypes(self, features_s: torch.tensor, features_q: torch.tensor, text_s: torch.tensor,
                         gt_s: torch.tensor, gt_q: torch.tensor, subcls: List[int],
-                        callback) -> None:
+                        callback, alpha=1) -> None:
         """
         inputs:
             features_s : shape [n_task, shot, c, h, w]
             features_q : shape [n_task, 1, c, h, w]
-            text_s: shape [n_task, texts = 1, c]
+            text_s: shape [n_task, n_label_text, c]
             gt_s : shape [n_task, shot, H, W]
             gt_q : shape [n_task, 1, H, W]
-
+            alpha: interpolation factor
         returns :
             prototypes : shape [n_task, c]
             bias : shape [n_task]
         """
 
         # DownSample support masks
-        n_task, shot, c, h, w = features_s.size()
-        ds_gt_s = F.interpolate(gt_s.float(), size=features_s.shape[-2:], mode='nearest')
-        ds_gt_s = ds_gt_s.long().unsqueeze(2)  # [n_task, shot, 1, h, w]
+        n_task, _, c, _, _ = features_q.size()
+        if features_s is None: # zero-shot with text embedding only
+            fg_prototype = text_s[:, -1, :]
+        else: # text embedding + few-shot segmentation
+            ds_gt_s = F.interpolate(gt_s.float(), size=features_s.shape[-2:], mode='nearest')
+            ds_gt_s = ds_gt_s.long().unsqueeze(2)  # [n_task, shot, 1, h, w]
 
-        # Computing prototypes NOTE: this is the weights of the classifier
-        fg_mask = (ds_gt_s == 1) # [n_tasks, shot, 1, 240, 240]
+            # Compute the mask region of each support for each task
+            fg_mask = (ds_gt_s == 1) # [n_tasks, shot, 1, h, w]
+            # find the prototype features from all the support images
+            fg_prototype = (features_s * fg_mask).sum(dim=(1, 3, 4))
+            fg_prototype /= (fg_mask.sum(dim=(1, 3, 4)) + 1e-10) # [n_tasks, shot, c]
 
-        # per-shot masked average pooling or per-shot prototype
-        fg_prototype = (features_s * fg_mask).sum(dim=(3, 4))
-        fg_prototype /= (fg_mask.sum(dim=(3, 4)) + 1e-10) # [n_tasks, shot, c]
-
-        # average the prototype across all shots including the label embeddings
-        fg_prototype = torch.concat([fg_prototype, text_s[:, -1, :].unsqueeze(1)], dim=1) # [n_tasks, shot + 1, c]
-        fg_prototype = torch.mean(fg_prototype, dim=1)
-
-        # PREVIOUS CODE
-        # fg_prototype = (features_s * fg_mask).sum(dim=(1, 3, 4))
-        # fg_prototype /= (fg_mask.sum(dim=(1, 3, 4)) + 1e-10)  # [n_task, c]
-        # fg_prototype = (fg_prototype + text_s[:, -1, :]) / 2
+            # interpolation between the class embedding and the masked average support features
+            fg_prototype = alpha * text_s[:, -1, :] + (1-alpha) * fg_prototype
 
         # store the initial weight / support prototype before finding the logits
         self.prototype = fg_prototype
@@ -153,6 +149,11 @@ class Classifier(object):
 
         if callback is not None:
             self.update_callback(callback, 0, features_s, features_q, subcls, gt_s, gt_q)
+
+        # LEGACY CODE
+        # # average the prototype across all shots including the label embeddings
+        # fg_prototype = torch.concat([fg_prototype, text_s[:, -1, :].unsqueeze(1)], dim=1) # [n_tasks, shot + 1, c]
+        # fg_prototype = torch.mean(fg_prototype, dim=1) # average over the shots
 
     def get_logits(self, features: torch.tensor) -> torch.tensor:
 
@@ -300,7 +301,7 @@ class Classifier(object):
         Performs RePRI inference
 
         inputs:
-            features_s : shape [n_tasks, shot, c, h, w]
+            features_s : shape [n_tasks, shot, c, h, w] or None
             features_q : shape [n_tasks, shot, c, h, w]
             gt_s : shape [n_tasks, shot, h, w]
             gt_q : shape [n_tasks, shot, h, w]
@@ -331,36 +332,49 @@ class Classifier(object):
         optimizer = torch.optim.SGD([self.prototype, self.bias], lr=self.lr)
 
         # downsample the groundth truth query and support
-        ds_gt_q = F.interpolate(gt_q.float(), size=features_s.size()[-2:], mode='nearest').long()
-        ds_gt_s = F.interpolate(gt_s.float(), size=features_s.size()[-2:], mode='nearest').long()
-
+        ds_gt_q = F.interpolate(gt_q.float(), size=features_q.size()[-2:], mode='nearest').long()
         valid_pixels_q = (ds_gt_q != 255).float()  # [n_tasks, shot, h, w]
-        valid_pixels_s = (ds_gt_s != 255).float()  # [n_tasks, shot, h, w]
 
-        one_hot_gt_s = to_one_hot(ds_gt_s, self.num_classes)  # [n_tasks, shot, num_classes, h, w]
+        ds_gt_s = None
+        valid_pixels_s = None
+        one_hot_gt_s = None
+        if features_s is not None:
+            ds_gt_s = F.interpolate(gt_s.float(), size=features_s.size()[-2:], mode='nearest').long()
+            valid_pixels_s = (ds_gt_s != 255).float()  # [n_tasks, shot, h, w]
+            one_hot_gt_s = to_one_hot(ds_gt_s, self.num_classes)  # [n_tasks, shot, num_classes, h, w]
 
         # self.adapt_iter is a hyperparameter to optimise    
         for iteration in range(1, self.adapt_iter):
+            
+            proba_s = None
+            if features_s is not None:
+                logits_s = self.get_logits(features_s)  # [n_tasks, shot, num_class, h, w]
+                proba_s = self.get_probas(logits_s)
 
-            logits_s = self.get_logits(features_s)  # [n_tasks, shot, num_class, h, w]
             logits_q = self.get_logits(features_q)  # [n_tasks, 1, num_class, h, w]
             proba_q = self.get_probas(logits_q)
-            proba_s = self.get_probas(logits_s)
 
             d_kl, cond_entropy, marginal = self.get_entropies(valid_pixels_q,
                                                                 proba_q,
                                                                 reduction='none')
-            ce = self.get_ce(proba_s, valid_pixels_s, one_hot_gt_s, reduction='none')
-            loss = l1 * ce + l2 * d_kl + l3 * cond_entropy
+        
+            if proba_s is not None and one_hot_gt_s is not None and valid_pixels_s is not None:
+                ce = self.get_ce(proba_s, valid_pixels_s, one_hot_gt_s, reduction='none')
+                loss = l1 * ce + l2 * d_kl + l3 * cond_entropy
+            else:
+                loss = d_kl + cond_entropy
 
             optimizer.zero_grad()
             loss.sum(0).backward()
             optimizer.step()
 
             # Update FB_param
-            if (iteration + 1) in self.FB_param_update and ('oracle' not in self.FB_param_type) and (l2.sum().item() != 0):
+            # for few-shot
+            if (iteration + 1) in self.FB_param_update and ('oracle' not in self.FB_param_type) and features_s is not None and (l2.sum().item() != 0):
                 deltas = self.compute_FB_param(features_q, gt_q).cpu()
                 l2 += 1
+            elif (iteration + 1) in self.FB_param_update and ('oracle' not in self.FB_param_type): # for 0 shot
+                deltas = self.compute_FB_param(features_q, gt_q).cpu()
 
             if callback is not None and (iteration + 1) % self.visdom_freq == 0:
                 self.update_callback(callback, iteration, features_s, features_q, subcls, gt_s, gt_q)

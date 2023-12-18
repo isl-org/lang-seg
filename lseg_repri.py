@@ -202,7 +202,7 @@ class Options:
         parser.add_argument(
             '--nshot', 
             type=int, 
-            default=2
+            default=1
             )
         parser.add_argument(
             '--fold', 
@@ -323,44 +323,37 @@ def episodic_validate(args):
 
                     # place it to the corresponding gpu/cpu/the ith gpu in the cluster
                     q_label = q_label.to(device)
-                    spprt_imgs = spprt_imgs.to(device)
-                    s_label = s_label.to(device)
+                    if spprt_imgs == []:
+                        spprt_imgs = None # no support images
+                        s_label = None
+                    else:
+                        spprt_imgs = spprt_imgs.to(device)
+                        s_label = s_label.to(device)
                     qry_img = qry_img.to(device)
 
                     # get the final feature tensor of the support images and the query image
-                    f_s, t_s, img_shape = model.extract_features(spprt_imgs.squeeze(0), subcls)
+                    f_s, t_s, _ = model.extract_features(spprt_imgs.squeeze(0) if spprt_imgs is not None else None, subcls)
                     f_q, _, _ = model.extract_features(qry_img, subcls)
                     t_s = t_s[-1]
 
-                    # # normalize the support features
-                    # f_s = [f_s[i].unsqueeze(0).permute(0,2,3,1).reshape(-1, c) for i in range(len(f_s))]
-                    # f_s = [(image_feature / image_feature.norm(dim=-1, keepdim=True)).reshape(c, h, w) for image_feature in f_s]
-                    # f_s = torch.stack(f_s, dim=0)
-
-                    # # normalize the query features
-                    # f_q = f_q.permute(0,2,3,1).reshape(-1, c)
-                    # f_q = (f_q / f_q.norm(dim=-1, keepdim=True)).reshape(c, h, w).unsqueeze(0)
-
-                    # # normalize the text features
-                    # t_s = [(text_feature / text_feature.norm(dim=-1, keepdim=True)) for text_feature in t_s]
-                    # t_s = torch.stack(t_s, dim=0)
-
-                    shot = f_s.size(0)
-                    n_shots[i] = shot
-                    features_s[i, :shot] = f_s.detach() # add the feature tensor of the shots to the container for each pair in the batch
+                    if spprt_imgs is not None:
+                        shot = f_s.size(0)
+                        n_shots[i] = shot
+                        features_s[i, :shot] = f_s.detach() # add the feature tensor of the shots to the container for each pair in the batch
+                        gt_s[i, :shot] = s_label
+                        
                     features_q[i] = f_q.detach() # same for the query but only one shot here
-                    text_s[i] = t_s.detach()
-
-                    # store the corresponding labels
-                    gt_s[i, :shot] = s_label
+                    text_s[i] = t_s.detach()                    
                     gt_q[i, 0] = q_label
                     
                     # add individual class label in a batch to the container, recall item() only work for tensor that contains one element only
                     classes.append([class_.item() for class_ in subcls])
             
             # =========== Normalize features along channel dimension ===============
-            # if args.norm_feat:
-            features_s = F.normalize(features_s, dim=2)
+            if args.shot == 0:
+                features_s = None
+            else:
+                features_s = F.normalize(features_s, dim=2)
             features_q = F.normalize(features_q, dim=2)
             text_s = F.normalize(text_s, dim=2)
 
@@ -525,7 +518,7 @@ def hyperparameter_tuning():
 
     # hyperparameter space
     RUNS = 1 # this is the same across all experiments
-    shots = [2, 1] # number shot outside of this will cause CUDA out of memory
+    shots = [0] # number shot outside of this will cause CUDA out of memory
     temperatures = [20]
     iterations = [50]
     learning_rates = [0.02]
@@ -582,13 +575,14 @@ def hyperparameter_tuning():
 
 
 if __name__ == "__main__":
-    # args = Options().parse()
-    # torch.manual_seed(args.seed)
-    # args.temp = 20
-    # args.adapt_iter = 50
-    # args.fb_updates = [10, 30]
-    # args.fb_type = 'joe'
-    # args.cls_lr = 0.025
-    # test(args)
+    args = Options().parse()
+    torch.manual_seed(args.seed)
+    args.temp = 100
+    args.adapt_iter = 100
+    args.fb_updates = [i for i in range(0, args.adapt_iter)]
+    args.fb_type = 'oracle'
+    args.cls_lr = 0.025
+    args.n_run = 1
+    test(args)
 
-    hyperparameter_tuning()
+    # hyperparameter_tuning()
