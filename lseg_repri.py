@@ -518,13 +518,13 @@ def hyperparameter_tuning():
 
     # hyperparameter space
     RUNS = 1 # this is the same across all experiments
-    shots = [0] # number shot outside of this will cause CUDA out of memory
+    shots = [0, 1] # number shot outside of this will cause CUDA out of memory
     temperatures = [20]
     iterations = [50]
-    learning_rates = [0.02]
+    learning_rates = [0.025]
     fb_params = [[10, 30]]
     fb_params_types = ['oracle'] # 'oracle'
-    folds = [0, 1,2,3]
+    folds = [0, 1, 2, 3]
     weights_paths = ['./checkpoints/pascal_fold0.ckpt', './checkpoints/pascal_fold1.ckpt', './checkpoints/pascal_fold2.ckpt', './checkpoints/pascal_fold3.ckpt']
 
     for fold, weight_path in zip(folds, weights_paths):
@@ -575,14 +575,14 @@ def hyperparameter_tuning():
 
 
 if __name__ == "__main__":
-    args = Options().parse()
-    torch.manual_seed(args.seed)
-    args.temp = 100
-    args.adapt_iter = 100
-    args.fb_updates = [i for i in range(0, args.adapt_iter)]
-    args.fb_type = 'oracle'
-    args.cls_lr = 0.025
-    args.n_run = 1
-    test(args)
+    # args = Options().parse()
+    # torch.manual_seed(args.seed)
+    # args.temp = 100
+    # args.adapt_iter = 100
+    # args.fb_updates = [i for i in range(0, args.adapt_iter)]
+    # args.fb_type = 'oracle'
+    # args.cls_lr = 0.025
+    # args.n_run = 1
+    # test(args)
 
-    # hyperparameter_tuning()
+    hyperparameter_tuning()
