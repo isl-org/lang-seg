@@ -10,15 +10,15 @@ from argparse import ArgumentParser
 
 import pytorch_lightning as pl
 
-from encoding.models import get_segmentation_model
-from encoding.nn import SegmentationLosses
+# from encoding.models import get_segmentation_model
+# from encoding.nn import SegmentationLosses
 
-from encoding.utils import batch_pix_accuracy, batch_intersection_union
+# from encoding.utils import batch_pix_accuracy, batch_intersection_union
 
 # add mixed precision
 import torch.cuda.amp as amp
 import numpy as np
-from encoding.utils.metrics import SegmentationMetric
+# from encoding.utils.metrics import SegmentationMetric
 
 # get fewshot dataloader
 from fewshot_data.model.hsnet import HypercorrSqueezeNetwork
@@ -314,7 +314,7 @@ class LSegmentationModuleZS(pl.LightningModule):
         return dataloader
 
     def val_dataloader(self):
-        self.val_iou = SegmentationMetric(self.num_classes)
+        # self.val_iou = SegmentationMetric(self.num_classes)
         if self.args.finetune_mode:
             dataloader = FSSDataset.build_dataloader(
                 self.args.benchmark, 

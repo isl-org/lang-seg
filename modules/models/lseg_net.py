@@ -155,10 +155,14 @@ class LSeg(BaseModel):
 
         self.scratch.output_conv = head
 
+        # each image only has one label to train/segment
+        # tokenize the label text for each image into a vector
         self.text = clip.tokenize(self.labels)    
-        
-    def forward(self, x, labelset=''):
+
+    def extract_features(self, x, labelset=''):
         if labelset == '':
+            # you forward all the training labels to the text encoder if not
+            # manually provide the labelsets
             text = self.text
         else:
             text = clip.tokenize(labelset)    
@@ -166,6 +170,7 @@ class LSeg(BaseModel):
         if self.channels_last == True:
             x.contiguous(memory_format=torch.channels_last)
 
+        # forward the image
         layer_1, layer_2, layer_3, layer_4 = forward_vit(self.pretrained, x)
 
         layer_1_rn = self.scratch.layer1_rn(layer_1)
@@ -180,6 +185,8 @@ class LSeg(BaseModel):
 
         text = text.to(x.device)
         self.logit_scale = self.logit_scale.to(x.device)
+
+        # forward the label text 
         text_features = self.clip_pretrained.encode_text(text)
 
         image_features = self.scratch.head1(path_1)
@@ -190,7 +197,54 @@ class LSeg(BaseModel):
         # normalized features
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+
+        return image_features, text_features, imshape
+
+    def forward(self, x, labelset=''):
+        # if labelset == '':
+        #     # you forward all the training labels to the text encoder if not
+        #     # manually provide the labelsets
+        #     text = self.text
+        # else:
+        #     text = clip.tokenize(labelset)    
         
+        # if self.channels_last == True:
+        #     x.contiguous(memory_format=torch.channels_last)
+
+        # # forward the image
+        # layer_1, layer_2, layer_3, layer_4 = forward_vit(self.pretrained, x)
+
+        # layer_1_rn = self.scratch.layer1_rn(layer_1)
+        # layer_2_rn = self.scratch.layer2_rn(layer_2)
+        # layer_3_rn = self.scratch.layer3_rn(layer_3)
+        # layer_4_rn = self.scratch.layer4_rn(layer_4)
+
+        # path_4 = self.scratch.refinenet4(layer_4_rn)
+        # path_3 = self.scratch.refinenet3(path_4, layer_3_rn)
+        # path_2 = self.scratch.refinenet2(path_3, layer_2_rn)
+        # path_1 = self.scratch.refinenet1(path_2, layer_1_rn)
+
+        # text = text.to(x.device)
+        # self.logit_scale = self.logit_scale.to(x.device)
+
+        # # forward the label text 
+        # text_features = self.clip_pretrained.encode_text(text)
+
+        # image_features = self.scratch.head1(path_1)
+
+        # imshape = image_features.shape
+        # image_features = image_features.permute(0,2,3,1).reshape(-1, self.out_c)
+
+        # # normalized features
+        # image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+        # text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+        
+        # feature extractor
+        image_features, text_features, imshape = self.extract_features(x, labelset)
+
+        ## classifier begins here
+
+        # the word-voxel tensor classifier
         logits_per_image = self.logit_scale * image_features.half() @ text_features.t()
 
         out = logits_per_image.float().view(imshape[0], imshape[2], imshape[3], -1).permute(0,3,1,2)
@@ -199,7 +253,7 @@ class LSeg(BaseModel):
             for _ in range(self.block_depth - 1):
                 out = self.scratch.head_block(out)
             out = self.scratch.head_block(out, False)
-
+        
         out = self.scratch.output_conv(out)
             
         return out
@@ -224,8 +278,3 @@ class LSegNet(LSeg):
 
         if path is not None:
             self.load(path)
-
-
-    
-        
-    

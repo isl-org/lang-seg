@@ -173,7 +173,7 @@ class LSeg(BaseModel):
             label[1] = self.label_list[class_i]
             text = clip.tokenize(label)
             self.texts.append(text)
-
+        
     def forward(self, x, class_info):
         texts = [self.texts[class_i] for class_i in class_info]
         
@@ -196,7 +196,6 @@ class LSeg(BaseModel):
         text_features = [self.clip_pretrained.encode_text(text.to(x.device)) for text in texts]
 
         image_features = self.scratch.head1(path_1)
-
 
         imshape = image_features.shape
         image_features = [image_features[i].unsqueeze(0).permute(0,2,3,1).reshape(-1, self.out_c) for i in range(len(image_features))]
@@ -291,15 +290,23 @@ class LSegRN(BaseModel):
 
         self.texts = []
         # original
-        label = ['others', '']
+        # label = ['others', '']
+        label = ['']
         for class_i in range(len(self.label_list)):
-            label[1] = self.label_list[class_i]
+            # label[1] = self.label_list[class_i]
+            label[0] = self.label_list[class_i]
             text = clip.tokenize(label)
             self.texts.append(text)
 
-    def forward(self, x, class_info):
+    def extract_features(self, x, class_info):
+
         texts = [self.texts[class_i] for class_i in class_info]
+        # a list of batch-text encodings text_features[i] is the text embeddings for batch i
+        text_features = [self.clip_pretrained.encode_text(text.to(device = 'cuda' if torch.cuda.is_available() else 'cpu')) for text in texts]
         
+        if x is None:
+            return None, text_features, None
+
         if self.channels_last == True:
             x.contiguous(memory_format=torch.channels_last)
 
@@ -319,22 +326,30 @@ class LSegRN(BaseModel):
         path_1 = self.scratch.refinenet1(path_2, layer_1_rn)
 
         self.logit_scale = self.logit_scale.to(x.device)
-        text_features = [self.clip_pretrained.encode_text(text.to(x.device)) for text in texts]
 
-        image_features = self.scratch.head1(path_1)
+        image_features = self.scratch.head1(path_1) # [batch or n_task, c, h, w]
 
         imshape = image_features.shape
+
+        return image_features, text_features, imshape
+
+    def forward(self, x, class_info):
+        image_features, text_features, imshape = self.extract_features(x, class_info)
+
+        # seperate the batch into a list of per-image features
         image_features = [image_features[i].unsqueeze(0).permute(0,2,3,1).reshape(-1, self.out_c) for i in range(len(image_features))]
 
         # normalized features
         image_features = [image_feature / image_feature.norm(dim=-1, keepdim=True) for image_feature in image_features]
         text_features = [text_feature / text_feature.norm(dim=-1, keepdim=True) for text_feature in text_features]
+    
         
-        logits_per_images = [self.logit_scale * image_feature.half() @ text_feature.t() for image_feature, text_feature in zip(image_features, text_features)]
+        # logits_per_images = [self.logit_scale * image_feature.half() @ text_feature.t() for image_feature, text_feature in zip(image_features, text_features)]
+        logits_per_images = [self.logit_scale * image_feature @ text_feature.t() for image_feature, text_feature in zip(image_features, text_features)]
         outs = [logits_per_image.float().view(1, imshape[2], imshape[3], -1).permute(0,3,1,2) for logits_per_image in logits_per_images]
-        out = torch.cat([out for out in outs], dim=0)
+        out = torch.cat([out for out in outs], dim=0) # [n_tasks, fore and back, h, w]
 
-        out = self.scratch.output_conv(out)
+        out = self.scratch.output_conv(out) # upsampling to 480
             
         return out
 

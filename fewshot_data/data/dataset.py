@@ -19,12 +19,11 @@ class FSSDataset:
         if imagenet_norm:
             cls.img_mean = [0.485, 0.456, 0.406]
             cls.img_std = [0.229, 0.224, 0.225]
-            print('use norm: {}, {}'.format(cls.img_mean, cls.img_std))
         else:
             cls.img_mean = [0.5] * 3
             cls.img_std = [0.5] * 3
-            print('use norm: {}, {}'.format(cls.img_mean, cls.img_std))
-
+        print('use norm: {}, {}'.format(cls.img_mean, cls.img_std))
+        
         cls.datapath = datapath
         cls.use_original_imgsize = use_original_imgsize
 
@@ -39,4 +38,4 @@ class FSSDataset:
         dataset = cls.datasets[benchmark](cls.datapath, fold=fold, transform=cls.transform, split=split, shot=shot, use_original_imgsize=cls.use_original_imgsize)
         dataloader = DataLoader(dataset, batch_size=bsz, shuffle=shuffle, num_workers=nworker)
 
-        return dataloader
+        return dataloader, dataset
