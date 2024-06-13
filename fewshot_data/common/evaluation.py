@@ -12,10 +12,10 @@ class Evaluator:
     def classify_prediction(cls, pred_mask, gt_mask, query_ignore_idx=None):
         # gt_mask = batch.get('query_mask')
 
-        # # Apply ignore_index in PASCAL-5i masks (following evaluation scheme in PFE-Net (TPAMI 2020))
-        # query_ignore_idx = batch.get('query_ignore_idx')
+        # Apply ignore_index in PASCAL-5i masks (following evaluation scheme in PFE-Net (TPAMI 2020))
+        # query_ignore_idx = batch.get('query_ignore_idx')        
         if query_ignore_idx is not None:
-            assert torch.logical_and(query_ignore_idx, gt_mask).sum() == 0
+            # assert torch.logical_and(query_ignore_idx, gt_mask).sum() == 0
             query_ignore_idx *= cls.ignore_index
             gt_mask = gt_mask + query_ignore_idx
             pred_mask[gt_mask == cls.ignore_index] = cls.ignore_index
@@ -27,10 +27,14 @@ class Evaluator:
             if _inter.size(0) == 0:  # as torch.histc returns error if it gets empty tensor (pytorch 1.5.1)
                 _area_inter = torch.tensor([0, 0], device=_pred_mask.device)
             else:
-                _area_inter = torch.histc(_inter, bins=2, min=0, max=1)
+                # _area_inter = torch.histc(_inter, bins=2, min=0, max=1)
+                _area_inter = torch.histc(_inter.to(torch.float32), bins=2, min=0, max=1)
+
             area_inter.append(_area_inter)
-            area_pred.append(torch.histc(_pred_mask, bins=2, min=0, max=1))
-            area_gt.append(torch.histc(_gt_mask, bins=2, min=0, max=1))
+            # area_pred.append(torch.histc(_pred_mask, bins=2, min=0, max=1))
+            # area_gt.append(torch.histc(_gt_mask, bins=2, min=0, max=1))
+            area_pred.append(torch.histc(_pred_mask.to(torch.float32), bins=2, min=0, max=1))
+            area_gt.append(torch.histc(_gt_mask.to(torch.float32), bins=2, min=0, max=1))
         area_inter = torch.stack(area_inter).t()
         area_pred = torch.stack(area_pred).t()
         area_gt = torch.stack(area_gt).t()

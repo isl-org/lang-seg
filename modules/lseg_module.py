@@ -1,12 +1,26 @@
+from collections import defaultdict
 import re
 import torch
 import torch.nn as nn
+import torch.cuda.amp as amp
 import torchvision.transforms as transforms
 from argparse import ArgumentParser
 import pytorch_lightning as pl
+import torch.nn.functional as F
+
+from modules.models.lseg_vit import forward_vit
+from repri_classifier import Classifier, batch_intersectionAndUnionGPU, to_one_hot
 from .lsegmentation_module import LSegmentationModule
-from .models.lseg_net import LSegNet
+from .models.lseg_net import BaseModel, LSeg, LSegNet
 from encoding.models.sseg.base import up_kwargs
+from tqdm import tqdm
+# from visdom_logger import VisdomLogger
+from torchfusion.utils import VisdomLogger
+
+
+import random
+import time
+
 
 import os
 import clip
@@ -18,7 +32,6 @@ import glob
 from PIL import Image
 import matplotlib.pyplot as plt
 import pandas as pd
-
 
 class LSegModule(LSegmentationModule):
     def __init__(self, data_path, dataset, batch_size, base_lr, max_epochs, **kwargs):
@@ -82,7 +95,7 @@ class LSegModule(LSegmentationModule):
             block_depth=kwargs["block_depth"],
             activation=kwargs["activation"],
         )
-
+        # something relates to the patch embedding of the vision transformer
         self.net.pretrained.model.patch_embed.img_size = (
             self.crop_size,
             self.crop_size,
@@ -101,10 +114,11 @@ class LSegModule(LSegmentationModule):
         f = open(path, 'r') 
         lines = f.readlines()      
         for line in lines: 
+            # one label for training each image but at inference time, we can do open vocab segmentation
             label = line.strip().split(',')[-1].split(';')[0]
             labels.append(label)
         f.close()
-        if dataset in ['ade20k']:
+        if dataset in ['ade20k']: # remove the header row for ade20k label file only
             labels = labels[1:]
         return labels
 

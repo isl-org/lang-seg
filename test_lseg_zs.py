@@ -24,14 +24,14 @@ class Options:
         parser.add_argument(
             "--backbone",
             type=str,
-            default="resnet50",
-            help="backbone name (default: resnet50)",
+            default="clip_resnet101",
+            help="backbone name (default: clip_resnet101)",
         )
         parser.add_argument(
             "--dataset",
             type=str,
-            default="ade20k",
-            help="dataset name (default: pascal12)",
+            default="pascal",
+            help="dataset name (default: pascal)",
         )
         parser.add_argument(
             "--workers", type=int, default=16, metavar="N", help="dataloader threads"
@@ -64,7 +64,7 @@ class Options:
         parser.add_argument(
             "--batch-size",
             type=int,
-            default=16,
+            default=2,
             metavar="N",
             help="input batch size for \
                             training (default: auto)",
@@ -72,7 +72,7 @@ class Options:
         parser.add_argument(
             "--test-batch-size",
             type=int,
-            default=16,
+            default=2,
             metavar="N",
             help="input batch size for \
                             testing (default: same as batch size)",
@@ -81,7 +81,7 @@ class Options:
         parser.add_argument(
             "--no-cuda",
             action="store_true",
-            default=False,
+            default=True,
             help="disables CUDA training",
         )
         parser.add_argument(
@@ -89,7 +89,7 @@ class Options:
         )
         # checking point
         parser.add_argument(
-            "--weights", type=str, default=None, help="checkpoint to test"
+            "--weights", type=str, default='./checkpoints/pascal_fold0.ckpt', help="checkpoint to test"
         )
         # evaluation option
         parser.add_argument(
@@ -208,7 +208,7 @@ class Options:
         parser.add_argument(
             '--datapath', 
             type=str, 
-            default='fewshot_data/Datasets_HSN'
+            default='/Users/maxxyouu/Desktop/lang-seg-fork/data/'
             )
 
         parser.add_argument(
@@ -272,7 +272,11 @@ def test(args):
     args.benchmark = args.dataset
     dataloader = FSSDataset.build_dataloader(args.benchmark, args.bsz, args.nworker, args.fold, 'test', args.nshot)
 
-    model = module.net.eval().cuda()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    if device == 'cuda':
+        model = module.net.eval().cuda()
+    else:
+        model = module.net.eval().cpu()
     # model = module.net.model.cpu()
 
     print(model)
@@ -288,13 +292,19 @@ def test(args):
     utils.fix_randseed(0)
     average_meter = AverageMeter(dataloader.dataset)
     for idx, batch in enumerate(dataloader):
-        batch = utils.to_cuda(batch)
+        if torch.cuda.is_available():
+            batch = utils.to_cuda(batch)
+        else:
+            batch = utils.to_cpu(batch)
         image = batch['query_img']
         target = batch['query_mask']
         class_info = batch['class_id']
+
         # pred_mask = evaluator.parallel_forward(image, class_info)
         pred_mask = model(image, class_info)
-        # assert pred_mask.argmax(dim=1).size() == batch['query_mask'].size()
+        
+        assert pred_mask.argmax(dim=1).size() == batch['query_mask'].size()
+        
         # 2. Evaluate prediction
         if args.benchmark == 'pascal' and batch['query_ignore_idx'] is not None:
             query_ignore_idx = batch['query_ignore_idx']
