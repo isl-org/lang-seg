@@ -28,5 +28,9 @@ def to_cuda(batch):
     return batch
 
 
-def to_cpu(tensor):
-    return tensor.detach().clone().cpu()
+def to_cpu(batch):
+    for key, value in batch.items():
+        if isinstance(value, torch.Tensor):
+            batch[key] = value.detach().clone().cpu()
+    # return tensor.detach().clone().cpu()
+    return batch

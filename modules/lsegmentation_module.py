@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 import pytorch_lightning as pl
 
 from data import get_dataset, get_available_datasets
-
+# run pip install torch-encoding if still not exists after run the pip install requirement.txt
 from encoding.models import get_segmentation_model
 from encoding.nn import SegmentationLosses
 
@@ -38,6 +38,7 @@ class LSegmentationModule(pl.LightningModule):
         self.scaler = amp.GradScaler(enabled=self.enabled)
 
     def forward(self, x):
+        # note that the network architecture is defined in lseg_net.py
         return self.net(x)
 
     def evaluate(self, x, target=None):
@@ -52,6 +53,8 @@ class LSegmentationModule(pl.LightningModule):
         return correct, labeled, inter, union
 
     def evaluate_random(self, x, labelset, target=None):
+        # check the foward implementation in lseg_net.py you see optionally 
+        # you can provide a label set for the foward pass
         pred = self.net.forward(x, labelset)
         if isinstance(pred, (tuple, list)):
             pred = pred[0]
@@ -61,11 +64,12 @@ class LSegmentationModule(pl.LightningModule):
         inter, union = batch_intersection_union(pred.data, target.data, self.nclass)
 
         return correct, labeled, inter, union
-    
 
     def training_step(self, batch, batch_nb):
         img, target = batch
         with amp.autocast(enabled=self.enabled):
+            # forward pass => call self.net() => with input of traning images, 
+            # and the whole labelset of the training data
             out = self(img)
             multi_loss = isinstance(out, tuple)
             if multi_loss:
